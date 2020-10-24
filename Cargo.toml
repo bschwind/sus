@@ -13,4 +13,6 @@ name = "server"
 path = "src/server/main.rs"
 
 [dependencies]
+futures = "0.3.7"
+wgpu = "0.6.0"
 winit = "0.23.0"
