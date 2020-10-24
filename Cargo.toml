@@ -1,0 +1,16 @@
+[package]
+name = "sus"
+version = "0.1.0"
+authors = ["Brian Schwind <brianmschwind@gmail.com>"]
+edition = "2018"
+
+[[bin]]
+name = "client"
+path = "src/main.rs"
+
+[[bin]]
+name = "server"
+path = "src/server/main.rs"
+
+[dependencies]
+winit = "0.23.0"
