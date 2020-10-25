@@ -1,5 +1,8 @@
-use game::network::{ClientToServer, ConnectPacket, ServerToClient};
-use laminar::{Packet, Socket, SocketEvent};
+use game::{
+    network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
+    PlayerInput,
+};
+use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use std::time::{Duration, Instant};
 use wgpu::{BackendBit, Instance};
 use winit::{
@@ -60,7 +63,13 @@ async fn run() {
     let mut last_frame_time = Instant::now();
 
     // Connect to the server
-    let mut socket = Socket::bind("127.0.0.1:0").expect("Could not connect to server");
+    let net_config = NetworkConfig {
+        idle_connection_timeout: Duration::from_secs(5),
+        heartbeat_interval: Some(Duration::from_secs(4)),
+        ..NetworkConfig::default()
+    };
+    let mut socket =
+        Socket::bind_with_config("127.0.0.1:0", net_config).expect("Could not connect to server");
     let server_addr = SERVER_ADDR.parse().unwrap();
     let connect_packet = ClientToServer::Connect(ConnectPacket::new("Brian"));
     socket
@@ -71,6 +80,9 @@ async fn run() {
         ))
         .expect("Could not send packet to server");
 
+    // Game state
+    let mut player_input = PlayerInput::new();
+
     event_loop.run(move |event, _, control_flow| {
         match event {
             Event::MainEventsCleared => {
@@ -80,6 +92,16 @@ async fn run() {
 
                     // Game logic here
                     // Consider using this: https://github.com/tuzz/game-loop
+                    let input_packet: PlayerInputPacket = (&player_input).into();
+                    let msg = ClientToServer::PlayerInput(input_packet);
+                    socket
+                        .send(Packet::unreliable_sequenced(
+                            server_addr,
+                            bincode::serialize(&msg).unwrap(),
+                            Some(game::network::INPUT_STREAM),
+                        ))
+                        .expect("Could not send packet to server");
+
                     socket.manual_poll(now);
                     match socket.recv() {
                         Some(SocketEvent::Packet(packet)) => {
@@ -90,6 +112,15 @@ async fn run() {
                                     match decoded {
                                         ServerToClient::ConnectAck => {
                                             println!("Server accepted us, yay!");
+                                        },
+                                        ServerToClient::NewPlayer(new_player_packet) => {
+                                            println!("New player: {:?}", new_player_packet);
+                                        },
+                                        ServerToClient::FullGameState(full_game_state) => {
+                                            println!("Full game state: {:?}", full_game_state);
+                                        },
+                                        ServerToClient::PlayerMovement => {
+                                            println!("Player moved!");
                                         },
                                     }
                                 }
@@ -136,6 +167,36 @@ async fn run() {
                 } => {
                     if let VirtualKeyCode::Escape = virtual_code {
                         *control_flow = ControlFlow::Exit;
+                    }
+
+                    match virtual_code {
+                        VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
+                        VirtualKeyCode::W => player_input.up = true,
+                        VirtualKeyCode::A => player_input.left = true,
+                        VirtualKeyCode::S => player_input.down = true,
+                        VirtualKeyCode::D => player_input.right = true,
+                        _ => {},
+                    }
+                },
+                WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            virtual_keycode: Some(virtual_code),
+                            state: ElementState::Released,
+                            ..
+                        },
+                    ..
+                } => {
+                    if let VirtualKeyCode::Escape = virtual_code {
+                        *control_flow = ControlFlow::Exit;
+                    }
+
+                    match virtual_code {
+                        VirtualKeyCode::W => player_input.up = false,
+                        VirtualKeyCode::A => player_input.left = false,
+                        VirtualKeyCode::S => player_input.down = false,
+                        VirtualKeyCode::D => player_input.right = false,
+                        _ => {},
                     }
                 },
                 _ => (),
