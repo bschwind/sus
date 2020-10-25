@@ -1,9 +1,16 @@
+use game::network::{ClientToServer, ConnectPacket, ServerToClient};
+use laminar::{Packet, Socket, SocketEvent};
+use std::time::{Duration, Instant};
 use wgpu::{BackendBit, Instance};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
+
+const TARGET_FPS: usize = 60;
+const FRAME_DT: Duration = Duration::from_micros((1000000.0 / TARGET_FPS as f64) as u64);
+const SERVER_ADDR: &str = "127.0.0.1:7600";
 
 const CORNFLOWER_BLUE: wgpu::Color =
     wgpu::Color { r: 100.0 / 255.0, g: 149.0 / 255.0, b: 237.0 / 255.0, a: 1.0 };
@@ -17,7 +24,7 @@ async fn run() {
     // All the apis that wgpu offers first tier of support for (Vulkan + Metal + DX12 + Browser WebGPU).
     let instance = Instance::new(BackendBit::PRIMARY);
     let surface = unsafe { instance.create_surface(&window) };
-    let swapchain_format = wgpu::TextureFormat::Bgra8UnormSrgb;
+    let swapchain_format = wgpu::TextureFormat::Bgra8Unorm;
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -50,14 +57,69 @@ async fn run() {
     };
 
     let mut swap_chain = device.create_swap_chain(&surface, &swapchain_desc);
+    let mut last_frame_time = Instant::now();
+
+    // Connect to the server
+    let mut socket = Socket::bind("127.0.0.1:0").expect("Could not connect to server");
+    let server_addr = SERVER_ADDR.parse().unwrap();
+    let connect_packet = ClientToServer::Connect(ConnectPacket::new("Brian"));
+    socket
+        .send(Packet::reliable_ordered(
+            server_addr,
+            bincode::serialize(&connect_packet).unwrap(),
+            None,
+        ))
+        .expect("Could not send packet to server");
 
     event_loop.run(move |event, _, control_flow| {
         match event {
-            Event::WindowEvent { event: WindowEvent::Resized(_size), .. } => {
+            Event::MainEventsCleared => {
+                if last_frame_time.elapsed() >= FRAME_DT {
+                    let now = Instant::now();
+                    last_frame_time = now;
+
+                    // Game logic here
+                    // Consider using this: https://github.com/tuzz/game-loop
+                    socket.manual_poll(now);
+                    match socket.recv() {
+                        Some(SocketEvent::Packet(packet)) => {
+                            let msg = packet.payload();
+
+                            if packet.addr() == server_addr {
+                                if let Ok(decoded) = bincode::deserialize::<ServerToClient>(msg) {
+                                    match decoded {
+                                        ServerToClient::ConnectAck => {
+                                            println!("Server accepted us, yay!");
+                                        },
+                                    }
+                                }
+                            } else {
+                                println!("Unknown sender.");
+                            }
+                        },
+                        Some(SocketEvent::Timeout(addr)) => {
+                            println!("Server timed out: {}", addr);
+                        },
+                        Some(SocketEvent::Connect(addr)) => {
+                            println!("Server connected: {}", addr);
+                        },
+                        Some(SocketEvent::Disconnect(addr)) => {
+                            println!("Server disconnected: {}", addr);
+                        },
+                        None => {},
+                    }
+
+                    window.request_redraw();
+                }
+            },
+            Event::WindowEvent { event: WindowEvent::Resized(new_size), .. } => {
                 // Recreate the swap chain with the new size
-                swapchain_desc.width = size.width;
-                swapchain_desc.height = size.height;
+                println!("Resizing to {}x{}", new_size.width, new_size.height);
+                swapchain_desc.width = new_size.width;
+                swapchain_desc.height = new_size.height;
                 swap_chain = device.create_swap_chain(&surface, &swapchain_desc);
+
+                window.request_redraw();
             },
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
@@ -71,11 +133,10 @@ async fn run() {
                             ..
                         },
                     ..
-                } => match virtual_code {
-                    VirtualKeyCode::Escape => {
+                } => {
+                    if let VirtualKeyCode::Escape = virtual_code {
                         *control_flow = ControlFlow::Exit;
-                    },
-                    _ => (),
+                    }
                 },
                 _ => (),
             },
