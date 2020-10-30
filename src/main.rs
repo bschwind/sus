@@ -1,10 +1,11 @@
+use bytemuck::{Pod, Zeroable};
 use game::{
     network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
     PlayerInput,
 };
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use std::time::{Duration, Instant};
-use wgpu::{BackendBit, Instance};
+use wgpu::{util::DeviceExt, BackendBit, Instance};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -17,6 +18,13 @@ const SERVER_ADDR: &str = "127.0.0.1:7600";
 
 const CORNFLOWER_BLUE: wgpu::Color =
     wgpu::Color { r: 100.0 / 255.0, g: 149.0 / 255.0, b: 237.0 / 255.0, a: 1.0 };
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct VertexData {
+    pos: [f32; 2],
+    uv: [f32; 2],
+}
 
 async fn run() {
     let event_loop = EventLoop::new();
@@ -58,6 +66,138 @@ async fn run() {
         height: size.height,
         present_mode: wgpu::PresentMode::Mailbox,
     };
+
+    // Begin vertex buffer and pipeline creation
+    let vertex_data = vec![
+        VertexData { pos: [-1.0, -1.0], uv: [0.0, 1.0] },
+        VertexData { pos: [-1.0, 1.0], uv: [0.0, 0.0] },
+        VertexData { pos: [1.0, 1.0], uv: [1.0, 0.0] },
+        VertexData { pos: [1.0, -1.0], uv: [1.0, 1.0] },
+    ];
+
+    let index_data = vec![0u16, 1, 3, 2];
+
+    let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(&vertex_data),
+        usage: wgpu::BufferUsage::VERTEX,
+    });
+
+    let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Index Buffer"),
+        contents: bytemuck::cast_slice(&index_data),
+        usage: wgpu::BufferUsage::INDEX,
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[
+            // wgpu::BindGroupLayoutEntry {
+            //     binding: 0,
+            //     visibility: wgpu::ShaderStage::VERTEX,
+            //     ty: wgpu::BindingType::UniformBuffer {
+            //         dynamic: false,
+            //         min_binding_size: wgpu::BufferSize::new(64), // Size of a 4x4 f32 matrix
+            //     },
+            //     count: None,
+            // },
+            // wgpu::BindGroupLayoutEntry {
+            //     binding: 1,
+            //     visibility: wgpu::ShaderStage::FRAGMENT,
+            //     ty: wgpu::BindingType::SampledTexture {
+            //         multisampled: false,
+            //         component_type: wgpu::TextureComponentType::Float,
+            //         dimension: wgpu::TextureViewDimension::D2,
+            //     },
+            //     count: None,
+            // },
+            // wgpu::BindGroupLayoutEntry {
+            //     binding: 2,
+            //     visibility: wgpu::ShaderStage::FRAGMENT,
+            //     ty: wgpu::BindingType::Sampler { comparison: false },
+            //     count: None,
+            // },
+        ],
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[
+            // wgpu::BindGroupEntry {
+            //     binding: 0,
+            //     resource: uniform_buf.as_entire_binding(),
+            // },
+            // wgpu::BindGroupEntry {
+            //     binding: 1,
+            //     resource: wgpu::BindingResource::TextureView(&texture_view),
+            // },
+            // wgpu::BindGroupEntry {
+            //     binding: 2,
+            //     resource: wgpu::BindingResource::Sampler(&sampler),
+            // },
+        ],
+        label: None,
+    });
+
+    let vertex_state = wgpu::VertexStateDescriptor {
+        index_format: wgpu::IndexFormat::Uint16,
+        vertex_buffers: &[wgpu::VertexBufferDescriptor {
+            stride: (std::mem::size_of::<VertexData>()) as wgpu::BufferAddress,
+            step_mode: wgpu::InputStepMode::Vertex,
+            attributes: &[
+                // Pos (vec2)
+                wgpu::VertexAttributeDescriptor {
+                    format: wgpu::VertexFormat::Float2,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                // UV (vec2)
+                wgpu::VertexAttributeDescriptor {
+                    format: wgpu::VertexFormat::Float2,
+                    offset: 2 * 4,
+                    shader_location: 1,
+                },
+            ],
+        }],
+    };
+
+    let vs_module = device.create_shader_module(wgpu::include_spirv!("../shaders/test.vert.spv"));
+    let fs_module = device.create_shader_module(wgpu::include_spirv!("../shaders/test.frag.spv"));
+
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&pipeline_layout),
+        vertex_stage: wgpu::ProgrammableStageDescriptor { module: &vs_module, entry_point: "main" },
+        fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+            module: &fs_module,
+            entry_point: "main",
+        }),
+        rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: wgpu::CullMode::Front,
+            ..Default::default()
+        }),
+        primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
+        color_states: &[wgpu::ColorStateDescriptor {
+            format: swapchain_desc.format,
+            color_blend: wgpu::BlendDescriptor::REPLACE,
+            alpha_blend: wgpu::BlendDescriptor::REPLACE,
+            write_mask: wgpu::ColorWrite::ALL,
+        }],
+        depth_stencil_state: None,
+        vertex_state,
+        sample_count: 1,
+        sample_mask: !0,
+        alpha_to_coverage_enabled: false,
+    });
+
+    // End pipeline creation
 
     let mut swap_chain = device.create_swap_chain(&surface, &swapchain_desc);
     let mut last_frame_time = Instant::now();
@@ -211,7 +351,7 @@ async fn run() {
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
                 {
-                    let _rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                             attachment: &frame.view,
                             resolve_target: None,
@@ -222,6 +362,12 @@ async fn run() {
                         }],
                         depth_stencil_attachment: None,
                     });
+
+                    rpass.set_pipeline(&pipeline);
+                    rpass.set_bind_group(0, &bind_group, &[]);
+                    rpass.set_index_buffer(index_buf.slice(..));
+                    rpass.set_vertex_buffer(0, vertex_buf.slice(..));
+                    rpass.draw_indexed(0..4 as u32, 0, 0..1);
                 }
 
                 queue.submit(Some(encoder.finish()));
