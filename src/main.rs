@@ -1,4 +1,7 @@
-use crate::graphics::{GraphicsDevice, TexturedQuad};
+use crate::{
+    graphics::{GraphicsDevice, TexturedQuad},
+    text::TextSystem,
+};
 use game::{
     network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
     PlayerInput,
@@ -12,6 +15,7 @@ use winit::{
 };
 
 mod graphics;
+mod text;
 
 const TARGET_FPS: usize = 60;
 const FRAME_DT: Duration = Duration::from_micros((1000000.0 / TARGET_FPS as f64) as u64);
@@ -23,6 +27,7 @@ async fn run() {
 
     let mut graphics_device = GraphicsDevice::new(&window).await;
     let textured_quad = TexturedQuad::new(&graphics_device);
+    let text_system = TextSystem::new(&graphics_device);
 
     let mut last_frame_time = Instant::now();
 
@@ -166,6 +171,7 @@ async fn run() {
                 // Draw the scene
                 let mut frame_encoder = graphics_device.begin_frame();
                 textured_quad.render(&mut frame_encoder);
+                text_system.render(&mut frame_encoder);
                 frame_encoder.finish();
             },
             _ => (),
