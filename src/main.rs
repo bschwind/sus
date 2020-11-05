@@ -1,6 +1,6 @@
 use crate::{
     graphics::{GraphicsDevice, TexturedQuad},
-    text::TextSystem,
+    text::{AxisAlign, Font, StyledText, TextAlignment, TextSystem},
 };
 use game::{
     network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
@@ -27,7 +27,7 @@ async fn run() {
 
     let mut graphics_device = GraphicsDevice::new(&window).await;
     let textured_quad = TexturedQuad::new(&graphics_device);
-    let text_system = TextSystem::new(&graphics_device);
+    let mut text_system = TextSystem::new(&graphics_device);
 
     let mut last_frame_time = Instant::now();
 
@@ -171,7 +171,12 @@ async fn run() {
                 // Draw the scene
                 let mut frame_encoder = graphics_device.begin_frame();
                 textured_quad.render(&mut frame_encoder);
-                text_system.render(&mut frame_encoder);
+                text_system.render_horizontal(
+                    TextAlignment::left_top(100, 100),
+                    &[StyledText::default_styling("This is a test.")],
+                    &mut frame_encoder,
+                    window.inner_size(),
+                );
                 frame_encoder.finish();
             },
             _ => (),

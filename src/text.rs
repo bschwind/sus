@@ -5,7 +5,11 @@ use fontdue::{
 };
 use gpu::GlyphPainter;
 use rect_packer::Packer;
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    borrow::Borrow,
+    collections::{hash_map::Entry, HashMap},
+    ops::Range,
+};
 use wgpu::Texture;
 use winit::dpi::PhysicalSize;
 
@@ -130,7 +134,7 @@ pub struct StyledText<'a> {
 
 impl<'a> StyledText<'a> {
     pub fn default_styling(text: &'a str) -> Self {
-        StyledText { text, font: Font::SpaceMono400(24), color: WHITE }
+        StyledText { text, font: Font::SpaceMono400(60), color: WHITE }
     }
 }
 
@@ -211,6 +215,22 @@ impl TextAlignment {
     }
 }
 
+// TODO - Make this public only to the module
+#[derive(Debug)]
+pub struct PositionedGlyph {
+    x: f32,
+    y: f32,
+    width: usize,
+    height: usize,
+    color: Color,
+
+    // Texture properties
+    texture_x: f32,
+    texture_y: f32,
+    texture_width: f32,
+    texture_height: f32,
+}
+
 pub struct TextSystem {
     font_data: FontData,
 
@@ -261,12 +281,10 @@ impl TextSystem {
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
         });
 
-        let glpyh_painter = GlyphPainter::new(graphics_device);
+        let glpyh_painter = GlyphPainter::new(graphics_device, &glyph_texture);
 
         Self { font_data, char_metadata, glyph_packer, layout, glyph_texture, glpyh_painter }
     }
-
-    pub fn render(&self, frame_encoder: &mut FrameEncoder) {}
 
     /// Rasterizes and caches this character in the glyph texture.
     /// Returns Some(RasterizeResult) if the character is packed into the texture,
@@ -346,6 +364,108 @@ impl TextSystem {
         }
     }
 
+    /// Call this for each "block" of text you want to render in a particular location.
+    /// Each element in the `text` slice can have a different style and they are rendered
+    /// one after the other so a given line of text can have multiple styles and colors.
+    pub fn render_horizontal<'a, T: Borrow<StyledText<'a>>>(
+        &mut self,
+        text_alignment: TextAlignment,
+        text_elements: &[T],
+        frame_encoder: &mut FrameEncoder,
+        window_size: winit::dpi::PhysicalSize<u32>,
+    ) {
+        // TODO(bschwind) - Do more work to guarantee the input ranges here
+        // match up with the character counts that are actually rendered.
+        let mut color_cache: Vec<(Range<usize>, Color)> = Vec::with_capacity(text_elements.len());
+
+        let mut start_range = 0;
+
+        for text_element in text_elements {
+            let text_element = text_element.borrow();
+
+            self.font_data.create_rasterizer(text_element.font);
+
+            let char_count = text_element
+                .text
+                .chars()
+                .filter(|c| {
+                    let styled_char = StyledCharacter { character: *c, font: text_element.font };
+                    self.rasterize_and_cache(styled_char, frame_encoder).is_ok()
+                })
+                .count();
+
+            color_cache.push((start_range..(start_range + char_count), text_element.color));
+
+            start_range += char_count;
+        }
+
+        let styles: Vec<_> = text_elements
+            .iter()
+            .map(|t| {
+                let t = t.borrow();
+                TextStyle {
+                    text: &t.text,
+                    px: t.font.size() as f32,
+                    font_index: self
+                        .font_data
+                        .font_index(&t.font)
+                        .unwrap_or_else(|| panic!("Missing font index for font: {:?}", t.font)),
+                }
+            })
+            .collect();
+
+        let layout_settings = text_alignment.into_layout_settings(window_size);
+
+        let mut output: Vec<GlyphPosition> = Vec::new();
+
+        self.layout.layout_horizontal(
+            &self.font_data.rasterizers(),
+            &styles.iter().collect::<Vec<_>>(),
+            &layout_settings,
+            &mut output,
+        );
+
+        let position_data: Vec<_> = output
+            .iter()
+            .enumerate()
+            .filter_map(|(i, d)| {
+                self.char_metadata
+                    .get(&StyledCharacter {
+                        character: d.key.c,
+                        font: *self.font_data.font(d.key.font_index).unwrap_or_else(|| {
+                            panic!(
+                                "Should have a font for the given font index: {}",
+                                d.key.font_index
+                            )
+                        }),
+                    })
+                    .map(|metadata| {
+                        let color = color_cache
+                            .iter()
+                            .find(|cache| cache.0.contains(&i))
+                            .map(|cache| cache.1)
+                            .unwrap_or(WHITE);
+
+                        PositionedGlyph {
+                            x: d.x,
+                            y: d.y,
+                            width: d.width,
+                            height: d.height,
+                            texture_x: metadata.texture_x,
+                            texture_y: metadata.texture_y,
+                            texture_width: metadata.texture_width,
+                            texture_height: metadata.texture_height,
+                            color,
+                        }
+                    })
+            })
+            .collect();
+
+        // TODO(bschwind) - Make an API for queueing up text to render, collect all
+        // the output from fontdue, and then render it all at once to reduce GPU draw calls.
+        self.glpyh_painter.render(&position_data, &self.glyph_texture, frame_encoder, window_size);
+    }
+
     fn write_to_texture(
         frame_encoder: &mut FrameEncoder,
         texture: &Texture,
@@ -360,7 +480,7 @@ impl TextSystem {
         frame_encoder.queue().write_texture(
             wgpu::TextureCopyView { texture, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 } },
             bitmap,
-            wgpu::TextureDataLayout { offset: 0, bytes_per_row: 4 * width, rows_per_image: 0 },
+            wgpu::TextureDataLayout { offset: 0, bytes_per_row: 1 * width, rows_per_image: 0 },
             bitmap_texture_extent,
         );
     }
@@ -381,7 +501,10 @@ impl Color {
 }
 
 mod gpu {
-    use crate::GraphicsDevice;
+    use crate::{
+        text::{FrameEncoder, PositionedGlyph, Texture},
+        GraphicsDevice,
+    };
     use bytemuck::{Pod, Zeroable};
     use wgpu::{
         util::DeviceExt, BackendBit, BindGroup, Buffer, BufferDescriptor, CommandEncoder, Device,
@@ -391,7 +514,8 @@ mod gpu {
     const MAX_INSTANCE_COUNT: usize = 40_000;
 
     /// Vertex attributes for instanced glyph data.
-    #[derive(Debug, Copy, Clone)]
+    #[repr(C)]
+    #[derive(Debug, Copy, Clone, Pod, Zeroable)]
     struct GlyphInstanceData {
         /// XY position of the bottom left of the glyph in pixels
         pos: [f32; 2],
@@ -442,15 +566,17 @@ mod gpu {
         glyph_vertex_buffer: Buffer,
         index_buffer: Buffer,
         instance_buffer: Buffer,
+        uniform_buffer: wgpu::Buffer,
         bind_group: BindGroup,
         pipeline: RenderPipeline,
     }
 
     impl GlyphPainter {
-        pub fn new(graphics_device: &GraphicsDevice) -> Self {
+        pub fn new(graphics_device: &GraphicsDevice, glyph_texture: &Texture) -> Self {
             let glyph_vertex_buffer = Self::build_vertex_buffer(graphics_device);
             let index_buffer = Self::build_index_buffer(graphics_device);
             let instance_buffer = Self::build_instance_buffer(graphics_device);
+            let uniform_buffer = Self::build_uniform_buffer(graphics_device);
 
             let device = graphics_device.device();
 
@@ -458,32 +584,32 @@ mod gpu {
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: None,
                     entries: &[
-                    // wgpu::BindGroupLayoutEntry {
-                    //     binding: 0,
-                    //     visibility: wgpu::ShaderStage::VERTEX,
-                    //     ty: wgpu::BindingType::UniformBuffer {
-                    //         dynamic: false,
-                    //         min_binding_size: wgpu::BufferSize::new(64), // Size of a 4x4 f32 matrix
-                    //     },
-                    //     count: None,
-                    // },
-                    // wgpu::BindGroupLayoutEntry {
-                    //     binding: 1,
-                    //     visibility: wgpu::ShaderStage::FRAGMENT,
-                    //     ty: wgpu::BindingType::SampledTexture {
-                    //         multisampled: false,
-                    //         component_type: wgpu::TextureComponentType::Float,
-                    //         dimension: wgpu::TextureViewDimension::D2,
-                    //     },
-                    //     count: None,
-                    // },
-                    // wgpu::BindGroupLayoutEntry {
-                    //     binding: 2,
-                    //     visibility: wgpu::ShaderStage::FRAGMENT,
-                    //     ty: wgpu::BindingType::Sampler { comparison: false },
-                    //     count: None,
-                    // },
-                ],
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::VERTEX,
+                            ty: wgpu::BindingType::UniformBuffer {
+                                dynamic: false,
+                                min_binding_size: wgpu::BufferSize::new(4 * 4 * 4), // Size of a 4x4 f32 matrix
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::SampledTexture {
+                                multisampled: false,
+                                component_type: wgpu::TextureComponentType::Float,
+                                dimension: wgpu::TextureViewDimension::D2,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
+                        },
+                    ],
                 });
 
             let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -492,21 +618,34 @@ mod gpu {
                 push_constant_ranges: &[],
             });
 
+            let texture_view = glyph_texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            });
+
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &bind_group_layout,
                 entries: &[
-                    // wgpu::BindGroupEntry {
-                    //     binding: 0,
-                    //     resource: uniform_buf.as_entire_binding(),
-                    // },
-                    // wgpu::BindGroupEntry {
-                    //     binding: 1,
-                    //     resource: wgpu::BindingResource::TextureView(&texture_view),
-                    // },
-                    // wgpu::BindGroupEntry {
-                    //     binding: 2,
-                    //     resource: wgpu::BindingResource::Sampler(&sampler),
-                    // },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        // TODO - Replace with this snippet when available.
+                        // resource: uniform_buffer.as_entire_binding(),
+                        resource: wgpu::BindingResource::Buffer(uniform_buffer.slice(..)),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
                 ],
                 label: None,
             });
@@ -559,10 +698,10 @@ mod gpu {
                 ],
             };
 
-            let vs_module =
-                device.create_shader_module(wgpu::include_spirv!("../resources/shaders/glyph.vert.spv"));
-            let fs_module =
-                device.create_shader_module(wgpu::include_spirv!("../resources/shaders/glyph.frag.spv"));
+            let vs_module = device
+                .create_shader_module(wgpu::include_spirv!("../resources/shaders/glyph.vert.spv"));
+            let fs_module = device
+                .create_shader_module(wgpu::include_spirv!("../resources/shaders/glyph.frag.spv"));
 
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: None,
@@ -583,8 +722,16 @@ mod gpu {
                 primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
                 color_states: &[wgpu::ColorStateDescriptor {
                     format: graphics_device.swap_chain_descriptor().format,
-                    color_blend: wgpu::BlendDescriptor::REPLACE,
-                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    color_blend: wgpu::BlendDescriptor {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha_blend: wgpu::BlendDescriptor {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
                     write_mask: wgpu::ColorWrite::ALL,
                 }],
                 depth_stencil_state: None,
@@ -594,62 +741,71 @@ mod gpu {
                 alpha_to_coverage_enabled: false,
             });
 
-            Self { glyph_vertex_buffer, index_buffer, instance_buffer, bind_group, pipeline }
+            Self {
+                glyph_vertex_buffer,
+                index_buffer,
+                instance_buffer,
+                uniform_buffer,
+                bind_group,
+                pipeline,
+            }
         }
 
-        // pub fn render(
-        //     &mut self,
-        //     glyph_positions: &[PositionedGlyph],
-        //     glyph_texture: &Texture2d,
-        //     target: &mut glium::Frame,
-        //     window_size: glutin::dpi::PhysicalSize,
-        // ) {
-        //     if glyph_positions.len() > MAX_INSTANCE_COUNT {
-        //         warn!("Trying to render more glyphs than the maximum. Max = {}, attempted render count = {}", MAX_INSTANCE_COUNT, glyph_positions.len());
-        //         return;
-        //     }
+        pub fn render(
+            &mut self,
+            glyph_positions: &[PositionedGlyph],
+            glyph_texture: &Texture,
+            frame_encoder: &mut FrameEncoder,
+            window_size: winit::dpi::PhysicalSize<u32>,
+        ) {
+            if glyph_positions.len() > MAX_INSTANCE_COUNT {
+                println!("Trying to render more glyphs than the maximum. Max = {}, attempted render count = {}", MAX_INSTANCE_COUNT, glyph_positions.len());
+                return;
+            }
 
-        //     // Update the glyph instance data.
-        //     {
-        //         let mut mapping = self.instance_buffer.map();
-        //         for (glyph, instance) in glyph_positions.iter().zip(mapping.iter_mut()) {
-        //             // Reference: https://github.com/mooman219/fontdue/issues/10#issuecomment-603480026
-        //             // The Y position is "inverted" because currently fontdue assumes
-        //             // the Y axis decreases as you move down the screen.
-        //             instance.pos = [glyph.x, -(glyph.y + glyph.height as f32)];
-        //             instance.size = [glyph.width as f32, glyph.height as f32];
-        //             instance.uv_extents = [
-        //                 glyph.texture_x,
-        //                 glyph.texture_y,
-        //                 glyph.texture_width,
-        //                 glyph.texture_height,
-        //             ];
-        //             instance.color = glyph.color.as_array();
-        //         }
-        //     }
+            let instance_data: Vec<_> = glyph_positions
+                .iter()
+                .map(|g| GlyphInstanceData {
+                    pos: [g.x, -(g.y + g.height as f32)],
+                    size: [g.width as f32, g.height as f32],
+                    uv_extents: [g.texture_x, g.texture_y, g.texture_width, g.texture_height],
+                    color: [
+                        g.color.red as f32 / 255.0,
+                        g.color.green as f32 / 255.0,
+                        g.color.blue as f32 / 255.0,
+                        g.color.alpha as f32 / 255.0,
+                    ],
+                })
+                .collect();
 
-        //     // Limit our instances to the number we were told to draw.
-        //     let instances = self
-        //         .instance_buffer
-        //         .slice(0..glyph_positions.len())
-        //         .expect("Glyph instance count exceeded maximum");
+            let queue = frame_encoder.queue();
+            queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
 
-        //     let draw_params =
-        //         DrawParameters { blend: Blend::alpha_blending(), ..DrawParameters::default() };
+            // TODO(bschwind) - Only write to the uniform buffer when the window resizes.
+            let proj =
+                screen_projection_matrix(window_size.width as f32, window_size.height as f32);
+            queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&proj));
 
-        //     let proj =
-        //         screen_projection_matrix(window_size.width as f32, window_size.height as f32);
+            let frame = &frame_encoder.frame;
+            let encoder = &mut frame_encoder.encoder;
 
-        //     target
-        //         .draw(
-        //             (&self.glyph_vertex_buffer, instances.per_instance().unwrap()),
-        //             &self.index_buffer,
-        //             &self.shader,
-        //             &glium::uniform! { proj: proj, glyph_texture: glyph_texture },
-        //             &draw_params,
-        //         )
-        //         .unwrap();
-        // }
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                    attachment: &frame.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
+                }],
+                depth_stencil_attachment: None,
+            });
+
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_bind_group(0, &self.bind_group, &[]);
+            rpass.set_index_buffer(self.index_buffer.slice(..));
+            rpass.set_vertex_buffer(0, self.glyph_vertex_buffer.slice(..));
+            rpass.set_vertex_buffer(1, self.instance_buffer.slice(..glyph_positions.len() as u64));
+
+            rpass.draw_indexed(0..4 as u32, 0, 0..glyph_positions.len() as u32);
+        }
 
         fn build_vertex_buffer(graphics_device: &GraphicsDevice) -> Buffer {
             let vertex_data = vec![
@@ -661,7 +817,7 @@ mod gpu {
 
             let device = graphics_device.device();
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Glyph vertex buffer"),
+                label: Some("Glyph Vertex Buffer"),
                 contents: bytemuck::cast_slice(&vertex_data),
                 usage: wgpu::BufferUsage::VERTEX,
             })
@@ -672,7 +828,7 @@ mod gpu {
 
             let device = graphics_device.device();
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
+                label: Some("Glyph Index Buffer"),
                 contents: bytemuck::cast_slice(&index_data),
                 usage: wgpu::BufferUsage::INDEX,
             })
@@ -681,11 +837,50 @@ mod gpu {
         fn build_instance_buffer(graphics_device: &GraphicsDevice) -> Buffer {
             let device = graphics_device.device();
             device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Index Buffer"),
-                size: MAX_INSTANCE_COUNT as u64,
+                label: Some("Glyph Instance Buffer"),
+                size: MAX_INSTANCE_COUNT as u64, // TODO - multiply by instance size?
                 usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
                 mapped_at_creation: false,
             })
         }
+
+        fn build_uniform_buffer(graphics_device: &GraphicsDevice) -> Buffer {
+            let device = graphics_device.device();
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Glyph Uniform Buffer"),
+                size: 4 * 4 * 4,
+                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                mapped_at_creation: false,
+            })
+        }
+    }
+
+    // Creates a matrix that projects screen coordinates defined by width and
+    // height orthographically onto the OpenGL vertex coordinates.
+    fn screen_projection_matrix(width: f32, height: f32) -> [[f32; 4]; 4] {
+        ortho_projection_matrix(0.0, width, height, 0.0, -1.0, 1.0)
+    }
+
+    // Creates a matrix that projects a cube defined by the arguments
+    // orthographically onto the OpenGL vertex coordinates.
+    // TODO(bschwind) - Double check this works outside of OpenGL/Metal
+    fn ortho_projection_matrix(
+        left: f32,
+        right: f32,
+        bottom: f32,
+        top: f32,
+        near: f32,
+        far: f32,
+    ) -> [[f32; 4]; 4] {
+        let lr = 1.0 / (left - right);
+        let bt = 1.0 / (bottom - top);
+        let nf = 1.0 / (near - far);
+
+        [
+            [-2.0 * lr, 0.0, 0.0, 0.0],
+            [0.0, -2.0 * bt, 0.0, 0.0],
+            [0.0, 0.0, 2.0 * nf, 0.0],
+            [(left + right) * lr, (top + bottom) * bt, (far + near) * nf, 1.0],
+        ]
     }
 }

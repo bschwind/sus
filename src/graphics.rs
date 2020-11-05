@@ -90,8 +90,8 @@ impl GraphicsDevice {
 
 pub struct FrameEncoder<'a> {
     queue: &'a mut Queue,
-    frame: SwapChainTexture,
-    encoder: CommandEncoder,
+    pub frame: SwapChainTexture,
+    pub encoder: CommandEncoder,
 }
 
 impl<'a> FrameEncoder<'a> {
