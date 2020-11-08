@@ -1,6 +1,6 @@
 use crate::graphics::{FrameEncoder, GraphicsDevice};
 use fontdue::{
-    layout::{GlyphPosition, HorizontalAlign, Layout, LayoutSettings, TextStyle, VerticalAlign},
+    layout::{CoordinateSystem, HorizontalAlign, Layout, LayoutSettings, TextStyle, VerticalAlign},
     Font as FontdueFont, FontSettings, Metrics,
 };
 use gpu::GlyphPainter;
@@ -8,7 +8,6 @@ use rect_packer::Packer;
 use std::{
     borrow::Borrow,
     collections::{hash_map::Entry, HashMap},
-    ops::Range,
 };
 use wgpu::Texture;
 use winit::dpi::PhysicalSize;
@@ -186,7 +185,7 @@ impl TextAlignment {
 
         let (x, horizontal_align) = match self.x {
             AxisAlign::Start(x) => (x, HorizontalAlign::Left),
-            AxisAlign::End(x) => (x - max_width, HorizontalAlign::Right),
+            AxisAlign::End(x) => (window_width - x - max_width, HorizontalAlign::Right),
             AxisAlign::Center(x) => (x - (max_width / 2), HorizontalAlign::Center),
             AxisAlign::WindowCenter => {
                 ((window_width / 2) - (max_width / 2), HorizontalAlign::Center)
@@ -195,7 +194,7 @@ impl TextAlignment {
 
         let (y, vertical_align) = match self.y {
             AxisAlign::Start(y) => (y, VerticalAlign::Top),
-            AxisAlign::End(y) => (y - max_height, VerticalAlign::Bottom),
+            AxisAlign::End(y) => (window_height - y - max_height, VerticalAlign::Bottom),
             AxisAlign::Center(y) => (y - (max_height / 2), VerticalAlign::Middle),
             AxisAlign::WindowCenter => {
                 ((window_height / 2) - (max_height / 2), VerticalAlign::Middle)
@@ -204,10 +203,9 @@ impl TextAlignment {
 
         LayoutSettings {
             x: x as f32,
-            y: -y as f32,
+            y: y as f32,
             max_width: Some(max_width as f32),
             max_height: Some(max_height as f32),
-            include_whitespace: true,
             horizontal_align,
             vertical_align,
             ..LayoutSettings::default()
@@ -242,10 +240,7 @@ pub struct TextSystem {
     glyph_packer: Packer,
 
     /// Object to perform text layout on content blocks.
-    layout: Layout,
-
-    /// GPU-side texture.
-    glyph_texture: Texture,
+    layout: Layout<usize>,
 
     /// GPU glyph renderer.
     glpyh_painter: GlyphPainter,
@@ -264,26 +259,11 @@ impl TextSystem {
         };
 
         let glyph_packer = Packer::new(packer_config);
-        let layout = Layout::new();
+        let layout = Layout::new(CoordinateSystem::PositiveYDown);
 
-        let glyph_texture_extent =
-            wgpu::Extent3d { width: BITMAP_WIDTH, height: BITMAP_HEIGHT, depth: 1 };
+        let glpyh_painter = GlyphPainter::new(graphics_device);
 
-        let device = graphics_device.device();
-
-        let glyph_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Glyph texture"),
-            size: glyph_texture_extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-        });
-
-        let glpyh_painter = GlyphPainter::new(graphics_device, &glyph_texture);
-
-        Self { font_data, char_metadata, glyph_packer, layout, glyph_texture, glpyh_painter }
+        Self { font_data, char_metadata, glyph_packer, layout, glpyh_painter }
     }
 
     /// Rasterizes and caches this character in the glyph texture.
@@ -338,9 +318,8 @@ impl TextSystem {
 
                     entry.insert(char_metadata);
 
-                    Self::write_to_texture(
+                    self.glpyh_painter.write_to_texture(
                         frame_encoder,
-                        &self.glyph_texture,
                         &bitmap,
                         packed_rect.x as u32,
                         packed_rect.y as u32,
@@ -374,36 +353,26 @@ impl TextSystem {
         frame_encoder: &mut FrameEncoder,
         window_size: winit::dpi::PhysicalSize<u32>,
     ) {
-        // TODO(bschwind) - Do more work to guarantee the input ranges here
-        // match up with the character counts that are actually rendered.
-        let mut color_cache: Vec<(Range<usize>, Color)> = Vec::with_capacity(text_elements.len());
-
-        let mut start_range = 0;
-
         for text_element in text_elements {
             let text_element = text_element.borrow();
 
             self.font_data.create_rasterizer(text_element.font);
 
-            let char_count = text_element
-                .text
-                .chars()
-                .filter(|c| {
-                    let styled_char = StyledCharacter { character: *c, font: text_element.font };
-                    self.rasterize_and_cache(styled_char, frame_encoder).is_ok()
-                })
-                .count();
-
-            color_cache.push((start_range..(start_range + char_count), text_element.color));
-
-            start_range += char_count;
+            for c in text_element.text.chars() {
+                let styled_char = StyledCharacter { character: c, font: text_element.font };
+                if let Err(err) = self.rasterize_and_cache(styled_char, frame_encoder) {
+                    println!("Error rasterizing character: {:?} - {:?}", c, err);
+                }
+            }
         }
 
         let styles: Vec<_> = text_elements
             .iter()
-            .map(|t| {
+            .enumerate()
+            .map(|(i, t)| {
                 let t = t.borrow();
                 TextStyle {
+                    user_data: i,
                     text: &t.text,
                     px: t.font.size() as f32,
                     font_index: self
@@ -416,23 +385,23 @@ impl TextSystem {
 
         let layout_settings = text_alignment.into_layout_settings(window_size);
 
-        let mut output: Vec<GlyphPosition> = Vec::new();
+        self.layout.reset(&layout_settings);
+        let fonts = &self.font_data.rasterizers();
+        for style in styles {
+            self.layout.append(fonts, &style);
+        }
 
-        self.layout.layout_horizontal(
-            &self.font_data.rasterizers(),
-            &styles.iter().collect::<Vec<_>>(),
-            &layout_settings,
-            &mut output,
-        );
+        let glyphs = self.layout.glyphs();
+        let char_metadata = &self.char_metadata;
+        let font_data = &self.font_data;
 
-        let position_data: Vec<_> = output
+        let position_data: Vec<_> = glyphs
             .iter()
-            .enumerate()
-            .filter_map(|(i, d)| {
-                self.char_metadata
+            .filter_map(|d| {
+                char_metadata
                     .get(&StyledCharacter {
                         character: d.key.c,
-                        font: *self.font_data.font(d.key.font_index).unwrap_or_else(|| {
+                        font: *font_data.font(d.key.font_index).unwrap_or_else(|| {
                             panic!(
                                 "Should have a font for the given font index: {}",
                                 d.key.font_index
@@ -440,11 +409,7 @@ impl TextSystem {
                         }),
                     })
                     .map(|metadata| {
-                        let color = color_cache
-                            .iter()
-                            .find(|cache| cache.0.contains(&i))
-                            .map(|cache| cache.1)
-                            .unwrap_or(WHITE);
+                        let color = text_elements[d.user_data].borrow().color;
 
                         PositionedGlyph {
                             x: d.x,
@@ -463,26 +428,7 @@ impl TextSystem {
 
         // TODO(bschwind) - Make an API for queueing up text to render, collect all
         // the output from fontdue, and then render it all at once to reduce GPU draw calls.
-        self.glpyh_painter.render(&position_data, &self.glyph_texture, frame_encoder, window_size);
-    }
-
-    fn write_to_texture(
-        frame_encoder: &mut FrameEncoder,
-        texture: &Texture,
-        bitmap: &[u8],
-        x: u32,
-        y: u32,
-        width: u32,
-        height: u32,
-    ) {
-        let bitmap_texture_extent = wgpu::Extent3d { width, height, depth: 1 };
-
-        frame_encoder.queue().write_texture(
-            wgpu::TextureCopyView { texture, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 } },
-            bitmap,
-            wgpu::TextureDataLayout { offset: 0, bytes_per_row: 1 * width, rows_per_image: 0 },
-            bitmap_texture_extent,
-        );
+        self.glpyh_painter.render(&position_data, frame_encoder, window_size);
     }
 }
 
@@ -501,15 +447,13 @@ impl Color {
 }
 
 mod gpu {
+    use super::{BITMAP_HEIGHT, BITMAP_WIDTH};
     use crate::{
         text::{FrameEncoder, PositionedGlyph, Texture},
         GraphicsDevice,
     };
     use bytemuck::{Pod, Zeroable};
-    use wgpu::{
-        util::DeviceExt, BackendBit, BindGroup, Buffer, BufferDescriptor, CommandEncoder, Device,
-        Instance, Queue, RenderPipeline, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
-    };
+    use wgpu::{util::DeviceExt, BindGroup, Buffer, RenderPipeline};
 
     const MAX_INSTANCE_COUNT: usize = 40_000;
 
@@ -559,10 +503,7 @@ mod gpu {
     /// the data required to render one glyph. We update this buffer when the font
     /// system tells us where and how many glyphs to render.
     pub struct GlyphPainter {
-        // glyph_vertex_buffer: glium::VertexBuffer<GlyphQuadVertex>,
-        // index_buffer: glium::IndexBuffer<u16>,
-        // instance_buffer: glium::VertexBuffer<GlyphInstanceData>,
-        // shader: glium::Program,
+        glyph_texture: Texture,
         glyph_vertex_buffer: Buffer,
         index_buffer: Buffer,
         instance_buffer: Buffer,
@@ -572,7 +513,8 @@ mod gpu {
     }
 
     impl GlyphPainter {
-        pub fn new(graphics_device: &GraphicsDevice, glyph_texture: &Texture) -> Self {
+        pub fn new(graphics_device: &GraphicsDevice) -> Self {
+            let glyph_texture = Self::build_glyph_texture(graphics_device);
             let glyph_vertex_buffer = Self::build_vertex_buffer(graphics_device);
             let index_buffer = Self::build_index_buffer(graphics_device);
             let instance_buffer = Self::build_instance_buffer(graphics_device);
@@ -742,6 +684,7 @@ mod gpu {
             });
 
             Self {
+                glyph_texture,
                 glyph_vertex_buffer,
                 index_buffer,
                 instance_buffer,
@@ -754,7 +697,6 @@ mod gpu {
         pub fn render(
             &mut self,
             glyph_positions: &[PositionedGlyph],
-            glyph_texture: &Texture,
             frame_encoder: &mut FrameEncoder,
             window_size: winit::dpi::PhysicalSize<u32>,
         ) {
@@ -766,7 +708,7 @@ mod gpu {
             let instance_data: Vec<_> = glyph_positions
                 .iter()
                 .map(|g| GlyphInstanceData {
-                    pos: [g.x, -(g.y + g.height as f32)],
+                    pos: [g.x, g.y],
                     size: [g.width as f32, g.height as f32],
                     uv_extents: [g.texture_x, g.texture_y, g.texture_width, g.texture_height],
                     color: [
@@ -805,6 +747,46 @@ mod gpu {
             rpass.set_vertex_buffer(1, self.instance_buffer.slice(..glyph_positions.len() as u64));
 
             rpass.draw_indexed(0..4 as u32, 0, 0..glyph_positions.len() as u32);
+        }
+
+        pub fn write_to_texture(
+            &self,
+            frame_encoder: &mut FrameEncoder,
+            bitmap: &[u8],
+            x: u32,
+            y: u32,
+            width: u32,
+            height: u32,
+        ) {
+            let bitmap_texture_extent = wgpu::Extent3d { width, height, depth: 1 };
+
+            frame_encoder.queue().write_texture(
+                wgpu::TextureCopyView {
+                    texture: &self.glyph_texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x, y, z: 0 },
+                },
+                bitmap,
+                wgpu::TextureDataLayout { offset: 0, bytes_per_row: 1 * width, rows_per_image: 0 },
+                bitmap_texture_extent,
+            );
+        }
+
+        fn build_glyph_texture(graphics_device: &GraphicsDevice) -> Texture {
+            let glyph_texture_extent =
+                wgpu::Extent3d { width: BITMAP_WIDTH, height: BITMAP_HEIGHT, depth: 1 };
+
+            let device = graphics_device.device();
+
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Glyph texture"),
+                size: glyph_texture_extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            })
         }
 
         fn build_vertex_buffer(graphics_device: &GraphicsDevice) -> Buffer {

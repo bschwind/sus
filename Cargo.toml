@@ -19,7 +19,7 @@ path = "src/server/main.rs"
 [dependencies]
 bincode = "1"
 bytemuck = { version = "1", features = ["derive"] }
-fontdue = "0.3"
+fontdue = { version = "0.4", git = "https://github.com/mooman219/fontdue", rev = "c71fb9d7649ce7738a178d162ab9eec57babf2ce" }
 futures = "0.3"
 laminar = "0.4"
 rect_packer = "0.2"
