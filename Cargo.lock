@@ -406,7 +406,8 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 [[package]]
 name = "fontdue"
 version = "0.4.0"
-source = "git+https://github.com/mooman219/fontdue?rev=c71fb9d7649ce7738a178d162ab9eec57babf2ce#c71fb9d7649ce7738a178d162ab9eec57babf2ce"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3203e88e086474e56b0785255804a0c23542f76253584d3f43152cd2bb95d0b7"
 dependencies = [
  "hashbrown",
  "ttf-parser 0.8.2",

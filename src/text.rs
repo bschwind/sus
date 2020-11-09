@@ -336,7 +336,7 @@ impl TextSystem {
                     }
                 } else {
                     // Couldn't pack into texture, resize it
-                    // warn!("Couldn't pack char: {:?} into glyph texture", character);
+                    println!("Couldn't pack char: {:?} into glyph texture", character);
                     Err(RasterizationError::NoTextureSpace)
                 }
             },
