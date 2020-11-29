@@ -35,7 +35,7 @@ impl Font {
 
     fn font_bytes(&self) -> &'static [u8] {
         match self {
-            Font::SpaceMono400(_) => include_bytes!("../resources/fonts/space_mono_400.ttf"),
+            Font::SpaceMono400(_) => include_bytes!("../../resources/fonts/space_mono_400.ttf"),
         }
     }
 }
@@ -449,7 +449,8 @@ impl Color {
 mod gpu {
     use super::{BITMAP_HEIGHT, BITMAP_WIDTH};
     use crate::{
-        text::{FrameEncoder, PositionedGlyph, Texture},
+        graphics::FrameEncoder,
+        text::{PositionedGlyph, Texture},
         GraphicsDevice,
     };
     use bytemuck::{Pod, Zeroable};
@@ -640,10 +641,12 @@ mod gpu {
                 ],
             };
 
-            let vs_module = device
-                .create_shader_module(wgpu::include_spirv!("../resources/shaders/glyph.vert.spv"));
-            let fs_module = device
-                .create_shader_module(wgpu::include_spirv!("../resources/shaders/glyph.frag.spv"));
+            let vs_module = device.create_shader_module(wgpu::include_spirv!(
+                "../../resources/shaders/glyph.vert.spv"
+            ));
+            let fs_module = device.create_shader_module(wgpu::include_spirv!(
+                "../../resources/shaders/glyph.frag.spv"
+            ));
 
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: None,

@@ -1417,7 +1417,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
-name = "sus"
+name = "sus-client"
 version = "0.1.0"
 dependencies = [
  "bincode",
@@ -1428,8 +1428,25 @@ dependencies = [
  "rect_packer",
  "serde",
  "shaderc",
+ "sus-common",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "sus-common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "sus-server"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "laminar",
+ "sus-common",
 ]
 
 [[package]]

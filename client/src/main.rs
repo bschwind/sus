@@ -2,12 +2,12 @@ use crate::{
     graphics::{GraphicsDevice, TexturedQuad},
     text::{AxisAlign, Color, Font, StyledText, TextAlignment, TextSystem},
 };
-use game::{
+use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
+use std::time::{Duration, Instant};
+use sus_common::{
     network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
     PlayerInput,
 };
-use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
-use std::time::{Duration, Instant};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -69,7 +69,7 @@ async fn run() {
                         .send(Packet::unreliable_sequenced(
                             server_addr,
                             bincode::serialize(&msg).unwrap(),
-                            Some(game::network::INPUT_STREAM),
+                            Some(sus_common::network::INPUT_STREAM),
                         ))
                         .expect("Could not send packet to server");
 

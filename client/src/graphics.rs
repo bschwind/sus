@@ -222,10 +222,10 @@ impl TexturedQuad {
             }],
         };
 
-        let vs_module =
-            device.create_shader_module(wgpu::include_spirv!("../resources/shaders/test.vert.spv"));
-        let fs_module =
-            device.create_shader_module(wgpu::include_spirv!("../resources/shaders/test.frag.spv"));
+        let vs_module = device
+            .create_shader_module(wgpu::include_spirv!("../../resources/shaders/test.vert.spv"));
+        let fs_module = device
+            .create_shader_module(wgpu::include_spirv!("../../resources/shaders/test.frag.spv"));
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,

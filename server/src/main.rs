@@ -1,9 +1,9 @@
-use game::{
+use laminar::{Config as NetworkConfig, ErrorKind, Packet, Socket, SocketEvent};
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
+use sus_common::{
     network::{ClientToServer, FullGameStatePacket, NewPlayerPacket, ServerToClient},
     Game, Player,
 };
-use laminar::{Config as NetworkConfig, ErrorKind, Packet, Socket, SocketEvent};
-use std::{collections::HashMap, net::SocketAddr, time::Duration};
 
 const BIND_ADDR: &str = "0.0.0.0:7600";
 const MAX_PLAYERS: usize = 16;
