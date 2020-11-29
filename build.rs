@@ -2,9 +2,9 @@ use shaderc;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    println!("cargo:rerun-if-changed=shaders");
+    println!("cargo:rerun-if-changed=resources/shaders");
 
-    for entry in std::fs::read_dir("shaders").expect("Shaders directory should exist") {
+    for entry in std::fs::read_dir("resources/shaders").expect("Shaders directory should exist") {
         let entry = entry.unwrap();
         let path = entry.path();
 

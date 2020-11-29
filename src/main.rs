@@ -1,4 +1,7 @@
-use crate::graphics::{GraphicsDevice, TexturedQuad};
+use crate::{
+    graphics::{GraphicsDevice, TexturedQuad},
+    text::{AxisAlign, Color, Font, StyledText, TextAlignment, TextSystem},
+};
 use game::{
     network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
     PlayerInput,
@@ -12,6 +15,7 @@ use winit::{
 };
 
 mod graphics;
+mod text;
 
 const TARGET_FPS: usize = 60;
 const FRAME_DT: Duration = Duration::from_micros((1000000.0 / TARGET_FPS as f64) as u64);
@@ -23,6 +27,7 @@ async fn run() {
 
     let mut graphics_device = GraphicsDevice::new(&window).await;
     let textured_quad = TexturedQuad::new(&graphics_device);
+    let mut text_system = TextSystem::new(&graphics_device);
 
     let mut last_frame_time = Instant::now();
 
@@ -43,6 +48,8 @@ async fn run() {
             None,
         ))
         .expect("Could not send packet to server");
+
+    let mut connected = false;
 
     // Game state
     let mut player_input = PlayerInput::new();
@@ -76,6 +83,7 @@ async fn run() {
                                     match decoded {
                                         ServerToClient::ConnectAck => {
                                             println!("Server accepted us, yay!");
+                                            connected = true;
                                         },
                                         ServerToClient::NewPlayer(new_player_packet) => {
                                             println!("New player: {:?}", new_player_packet);
@@ -166,6 +174,47 @@ async fn run() {
                 // Draw the scene
                 let mut frame_encoder = graphics_device.begin_frame();
                 textured_quad.render(&mut frame_encoder);
+                text_system.render_horizontal(
+                    TextAlignment {
+                        x: AxisAlign::Start(10),
+                        y: AxisAlign::WindowCenter,
+                        max_width: None,
+                        max_height: None,
+                    },
+                    &[
+                        StyledText::default_styling("This is a test."),
+                        StyledText {
+                            text: "Another test, blue this time",
+                            font: Font::SpaceMono400(40),
+                            color: Color::new(0, 0, 255, 255),
+                        },
+                        StyledText {
+                            text: "\nTest with a line break, green.",
+                            font: Font::SpaceMono400(40),
+                            color: Color::new(0, 255, 0, 255),
+                        },
+                        StyledText {
+                            text: "Red test\nHere are some numbers:\n0123456789!@#$%^&*(){}[].",
+                            font: Font::SpaceMono400(40),
+                            color: Color::new(255, 0, 0, 255),
+                        },
+                        StyledText {
+                            text: "\nOpacity test, this should be half-faded white",
+                            font: Font::SpaceMono400(40),
+                            color: Color::new(255, 255, 255, 128),
+                        },
+                        StyledText {
+                            text: &format!(
+                                "\nServer addr: {}\nConnected: {}",
+                                server_addr, connected
+                            ),
+                            font: Font::SpaceMono400(40),
+                            color: Color::new(255, 255, 255, 255),
+                        },
+                    ],
+                    &mut frame_encoder,
+                    window.inner_size(),
+                );
                 frame_encoder.finish();
             },
             _ => (),

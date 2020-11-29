@@ -90,11 +90,15 @@ impl GraphicsDevice {
 
 pub struct FrameEncoder<'a> {
     queue: &'a mut Queue,
-    frame: SwapChainTexture,
-    encoder: CommandEncoder,
+    pub frame: SwapChainTexture,
+    pub encoder: CommandEncoder,
 }
 
 impl<'a> FrameEncoder<'a> {
+    pub fn queue(&mut self) -> &mut Queue {
+        &mut self.queue
+    }
+
     // TODO(bschwind) - Maybe do this in a Drop impl
     pub fn finish(self) {
         self.queue.submit(Some(self.encoder.finish()));
@@ -219,9 +223,9 @@ impl TexturedQuad {
         };
 
         let vs_module =
-            device.create_shader_module(wgpu::include_spirv!("../shaders/test.vert.spv"));
+            device.create_shader_module(wgpu::include_spirv!("../resources/shaders/test.vert.spv"));
         let fs_module =
-            device.create_shader_module(wgpu::include_spirv!("../shaders/test.frag.spv"));
+            device.create_shader_module(wgpu::include_spirv!("../resources/shaders/test.frag.spv"));
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
