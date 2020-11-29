@@ -1426,7 +1426,6 @@ dependencies = [
  "futures",
  "laminar",
  "rect_packer",
- "serde",
  "shaderc",
  "sus-common",
  "wgpu",

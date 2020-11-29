@@ -11,7 +11,6 @@ fontdue = "0.4.0"
 futures = "0.3"
 laminar = "0.4"
 rect_packer = "0.2"
-serde = { version = "1", features = ["derive"] }
 sus-common = { path = "../common" }
 wgpu = "0.6"
 winit = "0.23"
