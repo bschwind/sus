@@ -9,7 +9,6 @@ use std::{
     borrow::Borrow,
     collections::{hash_map::Entry, HashMap},
 };
-use wgpu::Texture;
 use winit::dpi::PhysicalSize;
 
 const BITMAP_WIDTH: u32 = 4096;
@@ -35,7 +34,7 @@ impl Font {
 
     fn font_bytes(&self) -> &'static [u8] {
         match self {
-            Font::SpaceMono400(_) => include_bytes!("../../resources/fonts/space_mono_400.ttf"),
+            Font::SpaceMono400(_) => include_bytes!("../../../resources/fonts/space_mono_400.ttf"),
         }
     }
 }
@@ -449,12 +448,11 @@ impl Color {
 mod gpu {
     use super::{BITMAP_HEIGHT, BITMAP_WIDTH};
     use crate::{
-        graphics::FrameEncoder,
-        text::{PositionedGlyph, Texture},
+        graphics::{text::PositionedGlyph, FrameEncoder},
         GraphicsDevice,
     };
     use bytemuck::{Pod, Zeroable};
-    use wgpu::{util::DeviceExt, BindGroup, Buffer, RenderPipeline};
+    use wgpu::{util::DeviceExt, BindGroup, Buffer, RenderPipeline, Texture};
 
     const MAX_INSTANCE_COUNT: usize = 40_000;
 
@@ -642,10 +640,10 @@ mod gpu {
             };
 
             let vs_module = device.create_shader_module(wgpu::include_spirv!(
-                "../../resources/shaders/glyph.vert.spv"
+                "../../../resources/shaders/glyph.vert.spv"
             ));
             let fs_module = device.create_shader_module(wgpu::include_spirv!(
-                "../../resources/shaders/glyph.frag.spv"
+                "../../../resources/shaders/glyph.frag.spv"
             ));
 
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

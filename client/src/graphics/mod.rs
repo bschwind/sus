@@ -5,6 +5,8 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
+pub mod text;
+
 const CORNFLOWER_BLUE: wgpu::Color =
     wgpu::Color { r: 100.0 / 255.0, g: 149.0 / 255.0, b: 237.0 / 255.0, a: 1.0 };
 
@@ -223,9 +225,9 @@ impl TexturedQuad {
         };
 
         let vs_module = device
-            .create_shader_module(wgpu::include_spirv!("../../resources/shaders/test.vert.spv"));
+            .create_shader_module(wgpu::include_spirv!("../../../resources/shaders/test.vert.spv"));
         let fs_module = device
-            .create_shader_module(wgpu::include_spirv!("../../resources/shaders/test.frag.spv"));
+            .create_shader_module(wgpu::include_spirv!("../../../resources/shaders/test.frag.spv"));
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,

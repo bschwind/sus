@@ -1,6 +1,6 @@
-use crate::{
-    graphics::{GraphicsDevice, TexturedQuad},
+use crate::graphics::{
     text::{AxisAlign, Color, Font, StyledText, TextAlignment, TextSystem},
+    GraphicsDevice, TexturedQuad,
 };
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use std::time::{Duration, Instant};
@@ -15,7 +15,6 @@ use winit::{
 };
 
 mod graphics;
-mod text;
 
 const TARGET_FPS: usize = 60;
 const FRAME_DT: Duration = Duration::from_micros((1000000.0 / TARGET_FPS as f64) as u64);
