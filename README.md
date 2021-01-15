@@ -5,6 +5,7 @@ An open-source clone of a popular impostor game.
 ## Dependencies
 - cargo
 - rustc
+- cmake (for building GLSL shaders with `shaderc`)
 
 ## Build
 

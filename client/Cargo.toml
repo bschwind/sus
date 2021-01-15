@@ -13,7 +13,7 @@ laminar = "0.4"
 rect_packer = "0.2"
 sus-common = { path = "../common" }
 wgpu = "0.6"
-winit = "0.23"
+winit = "0.24"
 
 [build-dependencies]
 shaderc = { version = "0.6", features = ["build-from-source"]}
