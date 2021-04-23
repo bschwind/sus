@@ -69,8 +69,9 @@ impl GraphicsDevice {
             .expect("Failed to acquire next swap chain texture")
             .output;
 
-        let encoder =
-            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("GraphicsDevice.begin_frame() encoder") });
+        let encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("GraphicsDevice.begin_frame() encoder"),
+        });
 
         FrameEncoder { queue: &mut self.queue, frame, encoder }
     }
@@ -167,8 +168,8 @@ impl TexturedQuad {
             array_stride: (std::mem::size_of::<TexturedQuadVertex>()) as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
             attributes: &wgpu::vertex_attr_array![
-                0 => Float2, // pos
-                1 => Float2, // uv
+                0 => Float32x2, // pos
+                1 => Float32x2, // uv
             ],
         }];
 
@@ -191,8 +192,9 @@ impl TexturedQuad {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
                 strip_index_format: Some(wgpu::IndexFormat::Uint16),
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: wgpu::CullMode::Front,
+                cull_mode: Some(wgpu::Face::Front),
                 polygon_mode: wgpu::PolygonMode::Fill,
+                ..Default::default()
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
@@ -205,8 +207,10 @@ impl TexturedQuad {
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
                     format: graphics_device.swap_chain_descriptor().format,
-                    color_blend: wgpu::BlendState::REPLACE,
-                    alpha_blend: wgpu::BlendState::REPLACE,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent::REPLACE,
+                        alpha: wgpu::BlendComponent::REPLACE,
+                    }),
                     write_mask: wgpu::ColorWrite::ALL,
                 }],
             }),
@@ -221,8 +225,8 @@ impl TexturedQuad {
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("TexturedQuad render pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &frame.view,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &frame.view,
                 resolve_target: None,
                 ops: wgpu::Operations { load: wgpu::LoadOp::Clear(CORNFLOWER_BLUE), store: true },
             }],

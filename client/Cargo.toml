@@ -12,7 +12,7 @@ futures = "0.3"
 laminar = "0.4"
 rect_packer = "0.2"
 sus-common = { path = "../common" }
-wgpu = "0.7"
+wgpu = { git = "https://github.com/gfx-rs/wgpu-rs", rev = "c5ce55d003f9c6afac7971a5b98ad41bf5edd3dc" }
 winit = "0.24"
 
 [build-dependencies]
