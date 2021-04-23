@@ -48,7 +48,7 @@ struct FontData {
 
 impl FontData {
     fn new() -> Self {
-        FontData { rasterizer_indices: HashMap::new(), rasterizers: Vec::new(), fonts: Vec::new() }
+        Self { rasterizer_indices: HashMap::new(), rasterizers: Vec::new(), fonts: Vec::new() }
     }
 
     /// Creates and stores a rasterizer for this Font if one doesn't already exist.
@@ -132,7 +132,7 @@ pub struct StyledText<'a> {
 
 impl<'a> StyledText<'a> {
     pub fn default_styling(text: &'a str) -> Self {
-        StyledText { text, font: Font::SpaceMono400(60), color: WHITE }
+        Self { text, font: Font::SpaceMono400(60), color: WHITE }
     }
 }
 
@@ -152,7 +152,7 @@ pub enum AxisAlign {
 
 impl Default for AxisAlign {
     fn default() -> Self {
-        AxisAlign::Start(0)
+        Self::Start(0)
     }
 }
 
@@ -476,7 +476,7 @@ mod gpu {
 
     impl Default for GlyphInstanceData {
         fn default() -> Self {
-            GlyphInstanceData {
+            Self {
                 pos: [0.0, 0.0],
                 size: [0.0, 0.0],
                 uv_extents: [0.0, 0.0, 0.0, 0.0],
