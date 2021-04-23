@@ -48,7 +48,7 @@ struct FontData {
 
 impl FontData {
     fn new() -> Self {
-        Self { rasterizer_indices: HashMap::new(), rasterizers: Vec::new(), fonts: Vec::new() }
+        Self { rasterizer_indices: HashMap::new(), rasterizers: vec![], fonts: vec![] }
     }
 
     /// Creates and stores a rasterizer for this Font if one doesn't already exist.

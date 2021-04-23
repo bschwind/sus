@@ -79,6 +79,6 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Self {
-        Self { players: Vec::new(), game_state: GameState::Lobby }
+        Self { players: vec![], game_state: GameState::Lobby }
     }
 }
