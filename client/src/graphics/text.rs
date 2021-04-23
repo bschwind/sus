@@ -453,6 +453,7 @@ mod gpu {
     };
     use bytemuck::{Pod, Zeroable};
     use wgpu::{util::DeviceExt, BindGroup, Buffer, RenderPipeline, Texture};
+    use winit::dpi::Position;
 
     const MAX_INSTANCE_COUNT: usize = 40_000;
 
@@ -481,6 +482,22 @@ mod gpu {
                 size: [0.0, 0.0],
                 uv_extents: [0.0, 0.0, 0.0, 0.0],
                 color: [1.0, 1.0, 1.0, 1.0],
+            }
+        }
+    }
+
+    impl From<&PositionedGlyph> for GlyphInstanceData {
+        fn from(g: &PositionedGlyph) -> Self {
+            Self {
+                pos: [g.x, g.y],
+                size: [g.width as f32, g.height as f32],
+                uv_extents: [g.texture_x, g.texture_y, g.texture_width, g.texture_height],
+                color: [
+                    g.color.red as f32 / 255.0,
+                    g.color.green as f32 / 255.0,
+                    g.color.blue as f32 / 255.0,
+                    g.color.alpha as f32 / 255.0,
+                ],
             }
         }
     }
@@ -692,20 +709,8 @@ mod gpu {
                 return;
             }
 
-            let instance_data: Vec<_> = glyph_positions
-                .iter()
-                .map(|g| GlyphInstanceData {
-                    pos: [g.x, g.y],
-                    size: [g.width as f32, g.height as f32],
-                    uv_extents: [g.texture_x, g.texture_y, g.texture_width, g.texture_height],
-                    color: [
-                        g.color.red as f32 / 255.0,
-                        g.color.green as f32 / 255.0,
-                        g.color.blue as f32 / 255.0,
-                        g.color.alpha as f32 / 255.0,
-                    ],
-                })
-                .collect();
+            let instance_data: Vec<GlyphInstanceData> =
+                glyph_positions.iter().map(|g| g.into()).collect();
 
             let queue = frame_encoder.queue();
             queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
