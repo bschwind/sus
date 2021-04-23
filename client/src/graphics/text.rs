@@ -610,19 +610,26 @@ mod gpu {
                 },
             ];
 
-            let vs_module = device.create_shader_module(&wgpu::include_spirv!(
-                "../../../resources/shaders/glyph.vert.spv"
-            ));
-            let fs_module = device.create_shader_module(&wgpu::include_spirv!(
-                "../../../resources/shaders/glyph.frag.spv"
-            ));
+            // let vs_module = device.create_shader_module(&wgpu::include_spirv!(
+            //     "../../../resources/shaders/glyph.vert.spv"
+            // ));
+            // let fs_module = device.create_shader_module(&wgpu::include_spirv!(
+            //     "../../../resources/shaders/glyph.frag.spv"
+            // ));
+
+            let flags = wgpu::ShaderFlags::VALIDATION;
+            let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../../../resources/shaders/glyph.wgsl"))),
+                flags,
+            });
 
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("GlyphPainter render pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &vs_module,
-                    entry_point: "main",
+                    module: &shader,
+                    entry_point: "vs_text_main",
                     buffers: vertex_buffers,
                 },
                 primitive: wgpu::PrimitiveState {
@@ -639,8 +646,8 @@ mod gpu {
                     alpha_to_coverage_enabled: false,
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &fs_module,
-                    entry_point: "main",
+                    module: &shader,
+                    entry_point: "fs_text_main",
                     targets: &[wgpu::ColorTargetState {
                         format: graphics_device.swap_chain_descriptor().format,
                         color_blend: wgpu::BlendState {
