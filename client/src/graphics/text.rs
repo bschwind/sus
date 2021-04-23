@@ -523,7 +523,7 @@ mod gpu {
 
             let bind_group_layout =
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
+                    label: Some("GlyphPainter bind group layout"),
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
@@ -532,9 +532,6 @@ mod gpu {
                                 ty: wgpu::BufferBindingType::Uniform,
                                 has_dynamic_offset: false,
                                 min_binding_size: core::num::NonZeroU64::new(4 * 4 * 4), // Size of a 4x4 f32 matrix
-
-                                                                                         // dynamic: false,
-                                                                                         // min_binding_size: wgpu::BufferSize::new(4 * 4 * 4), // Size of a 4x4 f32 matrix
                             },
                             count: None,
                         },
@@ -545,27 +542,20 @@ mod gpu {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: false },
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 multisampled: false,
-                                // component_type: wgpu::TextureComponentType::Float,
-                                // dimension: wgpu::TextureViewDimension::D2,
-                                // multisampled: false,
                             },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: false,
-                                comparison: false,
-                                // comparison: false,
-                            },
+                            ty: wgpu::BindingType::Sampler { filtering: false, comparison: false },
                             count: None,
                         },
                     ],
                 });
 
             let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
+                label: Some("GlyphPainter pipeline layout"),
                 bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
@@ -582,13 +572,12 @@ mod gpu {
             });
 
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("GlyphPainter bind group"),
                 layout: &bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        // TODO - Replace with this snippet when available.
                         resource: uniform_buffer.as_entire_binding(),
-                        // resource: wgpu::BindingResource::Buffer(uniform_buffer.slice(..)),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -599,7 +588,6 @@ mod gpu {
                         resource: wgpu::BindingResource::Sampler(&sampler),
                     },
                 ],
-                label: None,
             });
 
             let vertex_buffers = &[
@@ -607,102 +595,20 @@ mod gpu {
                     array_stride: (std::mem::size_of::<GlyphQuadVertex>()) as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float2,
+                        0 => Float2, // UV
                     ],
-                    // attributes: &[
-                    //     // UV (vec2)
-                    //     wgpu::VertexAttribute {
-                    //         format: wgpu::VertexFormat::Float2,
-                    //         offset: 0,
-                    //         shader_location: 0,
-                    //     },
-                    // ],
                 },
                 wgpu::VertexBufferLayout {
                     array_stride: (std::mem::size_of::<GlyphInstanceData>()) as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Instance,
                     attributes: &wgpu::vertex_attr_array![
-                        1 => Float2,
-                        2 => Float2,
-                        3 => Float4,
-                        4 => Float4,
+                        1 => Float2, // pos
+                        2 => Float2, // size
+                        3 => Float4, // uv_extents
+                        4 => Float4, // color
                     ],
-                    // attributes: &[
-                    //     // pos (vec2)
-                    //     wgpu::VertexAttribute {
-                    //         format: wgpu::VertexFormat::Float2,
-                    //         offset: 0,
-                    //         shader_location: 1,
-                    //     },
-                    //     // size (vec2)
-                    //     wgpu::VertexAttribute {
-                    //         format: wgpu::VertexFormat::Float2,
-                    //         offset: 2 * 4,
-                    //         shader_location: 2,
-                    //     },
-                    //     // uv_extents (vec4)
-                    //     wgpu::VertexAttribute {
-                    //         format: wgpu::VertexFormat::Float4,
-                    //         offset: (2 * 4) + (2 * 4),
-                    //         shader_location: 3,
-                    //     },
-                    //     // color (vec4)
-                    //     wgpu::VertexAttribute {
-                    //         format: wgpu::VertexFormat::Float4,
-                    //         offset: (2 * 4) + (2 * 4) + (4 * 4),
-                    //         shader_location: 4,
-                    //     },
-                    // ],
                 },
             ];
-
-            // let vertex_state = wgpu::VertexState {
-            //     index_format: wgpu::IndexFormat::Uint16,
-            //     vertex_buffers: &[
-            //         wgpu::VertexBufferLayout {
-            //             stride: (std::mem::size_of::<GlyphQuadVertex>()) as wgpu::BufferAddress,
-            //             step_mode: wgpu::InputStepMode::Vertex,
-            //             attributes: &[
-            //                 // UV (vec2)
-            //                 wgpu::VertexAttributeDescriptor {
-            //                     format: wgpu::VertexFormat::Float2,
-            //                     offset: 0,
-            //                     shader_location: 0,
-            //                 },
-            //             ],
-            //         },
-            //         wgpu::VertexBufferLayout {
-            //             stride: (std::mem::size_of::<GlyphInstanceData>()) as wgpu::BufferAddress,
-            //             step_mode: wgpu::InputStepMode::Instance,
-            //             attributes: &[
-            //                 // pos (vec2)
-            //                 wgpu::VertexAttributeDescriptor {
-            //                     format: wgpu::VertexFormat::Float2,
-            //                     offset: 0,
-            //                     shader_location: 1,
-            //                 },
-            //                 // size (vec2)
-            //                 wgpu::VertexAttributeDescriptor {
-            //                     format: wgpu::VertexFormat::Float2,
-            //                     offset: 2 * 4,
-            //                     shader_location: 2,
-            //                 },
-            //                 // uv_extents (vec4)
-            //                 wgpu::VertexAttributeDescriptor {
-            //                     format: wgpu::VertexFormat::Float4,
-            //                     offset: (2 * 4) + (2 * 4),
-            //                     shader_location: 3,
-            //                 },
-            //                 // color (vec4)
-            //                 wgpu::VertexAttributeDescriptor {
-            //                     format: wgpu::VertexFormat::Float4,
-            //                     offset: (2 * 4) + (2 * 4) + (4 * 4),
-            //                     shader_location: 4,
-            //                 },
-            //             ],
-            //         },
-            //     ],
-            // };
 
             let vs_module = device.create_shader_module(&wgpu::include_spirv!(
                 "../../../resources/shaders/glyph.vert.spv"
@@ -712,7 +618,7 @@ mod gpu {
             ));
 
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
+                label: Some("GlyphPainter render pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &vs_module,
@@ -750,31 +656,6 @@ mod gpu {
                         write_mask: wgpu::ColorWrite::ALL,
                     }],
                 }),
-                // rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                //     front_face: wgpu::FrontFace::Ccw,
-                //     cull_mode: wgpu::CullMode::Front,
-                //     ..Default::default()
-                // }),
-
-                // primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-                // color_states: &[wgpu::ColorStateDescriptor {
-                //     format: graphics_device.swap_chain_descriptor().format,
-                //     color_blend: wgpu::BlendDescriptor {
-                //         src_factor: wgpu::BlendFactor::SrcAlpha,
-                //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                //         operation: wgpu::BlendOperation::Add,
-                //     },
-                //     alpha_blend: wgpu::BlendDescriptor {
-                //         src_factor: wgpu::BlendFactor::SrcAlpha,
-                //         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                //         operation: wgpu::BlendOperation::Add,
-                //     },
-                //     write_mask: wgpu::ColorWrite::ALL,
-                // }],
-                // depth_stencil_state: None,
-                // sample_count: 1,
-                // sample_mask: !0,
-                // alpha_to_coverage_enabled: false,
             });
 
             Self {
@@ -825,8 +706,8 @@ mod gpu {
             let frame = &frame_encoder.frame;
             let encoder = &mut frame_encoder.encoder;
 
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("GlyphPainter render pass"),
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                     attachment: &frame.view,
                     resolve_target: None,
@@ -835,18 +716,18 @@ mod gpu {
                 depth_stencil_attachment: None,
             });
 
-            rpass.set_pipeline(&self.pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            rpass.set_vertex_buffer(0, self.glyph_vertex_buffer.slice(..));
-            rpass.set_vertex_buffer(
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_vertex_buffer(0, self.glyph_vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(
                 1,
                 self.instance_buffer.slice(
                     ..(glyph_positions.len() * std::mem::size_of::<PositionedGlyph>()) as u64,
                 ),
             );
 
-            rpass.draw_indexed(0..4 as u32, 0, 0..glyph_positions.len() as u32);
+            render_pass.draw_indexed(0..4 as u32, 0, 0..glyph_positions.len() as u32);
         }
 
         pub fn write_to_texture(
