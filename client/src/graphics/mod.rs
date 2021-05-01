@@ -40,9 +40,9 @@ impl GraphicsDevice {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
+                    label: Some("GraphicsDevice device descriptor"),
                     features: wgpu::Features::empty(),
                     limits: wgpu::Limits::default(),
-                    shader_validation: true,
                 },
                 None,
             )
@@ -50,7 +50,7 @@ impl GraphicsDevice {
             .expect("Failed to create device");
 
         let swap_chain_descriptor = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: swapchain_format,
             width: size.width,
             height: size.height,
@@ -70,7 +70,7 @@ impl GraphicsDevice {
             .output;
 
         let encoder =
-            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("GraphicsDevice.begin_frame() encoder") });
 
         FrameEncoder { queue: &mut self.queue, frame, encoder }
     }
@@ -147,116 +147,69 @@ impl TexturedQuad {
         });
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[
-                // wgpu::BindGroupLayoutEntry {
-                //     binding: 0,
-                //     visibility: wgpu::ShaderStage::VERTEX,
-                //     ty: wgpu::BindingType::UniformBuffer {
-                //         dynamic: false,
-                //         min_binding_size: wgpu::BufferSize::new(64), // Size of a 4x4 f32 matrix
-                //     },
-                //     count: None,
-                // },
-                // wgpu::BindGroupLayoutEntry {
-                //     binding: 1,
-                //     visibility: wgpu::ShaderStage::FRAGMENT,
-                //     ty: wgpu::BindingType::SampledTexture {
-                //         multisampled: false,
-                //         component_type: wgpu::TextureComponentType::Float,
-                //         dimension: wgpu::TextureViewDimension::D2,
-                //     },
-                //     count: None,
-                // },
-                // wgpu::BindGroupLayoutEntry {
-                //     binding: 2,
-                //     visibility: wgpu::ShaderStage::FRAGMENT,
-                //     ty: wgpu::BindingType::Sampler { comparison: false },
-                //     count: None,
-                // },
-            ],
+            label: Some("TexturedQuad bind group layout"),
+            entries: &[],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
+            label: Some("TexturedQuad pipeline layout"),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("TexturedQuad bind group"),
             layout: &bind_group_layout,
-            entries: &[
-                // wgpu::BindGroupEntry {
-                //     binding: 0,
-                //     resource: uniform_buf.as_entire_binding(),
-                // },
-                // wgpu::BindGroupEntry {
-                //     binding: 1,
-                //     resource: wgpu::BindingResource::TextureView(&texture_view),
-                // },
-                // wgpu::BindGroupEntry {
-                //     binding: 2,
-                //     resource: wgpu::BindingResource::Sampler(&sampler),
-                // },
-            ],
-            label: None,
+            entries: &[],
         });
 
-        let vertex_state = wgpu::VertexStateDescriptor {
-            index_format: wgpu::IndexFormat::Uint16,
-            vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                stride: (std::mem::size_of::<TexturedQuadVertex>()) as wgpu::BufferAddress,
-                step_mode: wgpu::InputStepMode::Vertex,
-                attributes: &[
-                    // Pos (vec2)
-                    wgpu::VertexAttributeDescriptor {
-                        format: wgpu::VertexFormat::Float2,
-                        offset: 0,
-                        shader_location: 0,
-                    },
-                    // UV (vec2)
-                    wgpu::VertexAttributeDescriptor {
-                        format: wgpu::VertexFormat::Float2,
-                        offset: 2 * 4,
-                        shader_location: 1,
-                    },
-                ],
-            }],
-        };
+        let vertex_buffers = &[wgpu::VertexBufferLayout {
+            array_stride: (std::mem::size_of::<TexturedQuadVertex>()) as wgpu::BufferAddress,
+            step_mode: wgpu::InputStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![
+                0 => Float2, // pos
+                1 => Float2, // uv
+            ],
+        }];
 
-        let vs_module = device
-            .create_shader_module(wgpu::include_spirv!("../../../resources/shaders/test.vert.spv"));
-        let fs_module = device
-            .create_shader_module(wgpu::include_spirv!("../../../resources/shaders/test.frag.spv"));
+        let vs_module = device.create_shader_module(&wgpu::include_spirv!(
+            "../../../resources/shaders/test.vert.spv"
+        ));
+        let fs_module = device.create_shader_module(&wgpu::include_spirv!(
+            "../../../resources/shaders/test.frag.spv"
+        ));
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
+            label: Some("TexturedQuad render pipeline"),
             layout: Some(&pipeline_layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
+            vertex: wgpu::VertexState {
                 module: &vs_module,
                 entry_point: "main",
+                buffers: vertex_buffers,
             },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &fs_module,
-                entry_point: "main",
-            }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: Some(wgpu::IndexFormat::Uint16),
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: wgpu::CullMode::Front,
-                ..Default::default()
+                polygon_mode: wgpu::PolygonMode::Fill,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &fs_module,
+                entry_point: "main",
+                targets: &[wgpu::ColorTargetState {
+                    format: graphics_device.swap_chain_descriptor().format,
+                    color_blend: wgpu::BlendState::REPLACE,
+                    alpha_blend: wgpu::BlendState::REPLACE,
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
             }),
-            primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: graphics_device.swap_chain_descriptor().format,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            depth_stencil_state: None,
-            vertex_state,
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
         });
 
         Self { vertex_buf, index_buf, pipeline, bind_group }
@@ -266,7 +219,8 @@ impl TexturedQuad {
         let frame = &frame_encoder.frame;
         let encoder = &mut frame_encoder.encoder;
 
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("TexturedQuad render pass"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &frame.view,
                 resolve_target: None,
@@ -275,10 +229,10 @@ impl TexturedQuad {
             depth_stencil_attachment: None,
         });
 
-        rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, &self.bind_group, &[]);
-        rpass.set_index_buffer(self.index_buf.slice(..));
-        rpass.set_vertex_buffer(0, self.vertex_buf.slice(..));
-        rpass.draw_indexed(0..4 as u32, 0, 0..1);
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+        render_pass.draw_indexed(0..4 as u32, 0, 0..1);
     }
 }
