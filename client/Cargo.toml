@@ -6,14 +6,6 @@ edition = "2018"
 
 [dependencies]
 bincode = "1"
-bytemuck = { version = "1", features = ["derive"] }
-fontdue = "0.4.0"
-futures = "0.3"
 laminar = "0.4"
-rect_packer = "0.2"
 sus-common = { path = "../common" }
-wgpu = "0.7"
-winit = "0.24"
-
-[build-dependencies]
-shaderc = { version = "0.6", features = ["build-from-source"]}
+simple-game = { git = "https://github.com/bschwind/simple-game", branch = "bevy", features = ["bevy"] }
