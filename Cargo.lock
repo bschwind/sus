@@ -529,8 +529,18 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b153fe7cbef478c567df0f972e02e6d736db11affe43dfc9c56a9374d1adfb87"
 dependencies = [
- "crossbeam-utils",
+ "crossbeam-utils 0.7.2",
  "maybe-uninit",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06ed27e177f16d65f0f0c22a213e17c696ace5dd64b14258b52f9417ccb52db4"
+dependencies = [
+ "cfg-if 1.0.0",
+ "crossbeam-utils 0.8.5",
 ]
 
 [[package]]
@@ -541,6 +551,16 @@ checksum = "c3c7c73a2d1e9fc0886a08b93e98eb643461230d5f1925e4036204d5f2e261a8"
 dependencies = [
  "autocfg",
  "cfg-if 0.1.10",
+ "lazy_static",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d82cfc11ce7f2c3faef78d8a684447b40d503d9681acebed6cb728d45940c4db"
+dependencies = [
+ "cfg-if 1.0.0",
  "lazy_static",
 ]
 
@@ -1173,11 +1193,26 @@ checksum = "0065119db26bdc6a123618300f920dfe93102852bed5c0a5f9e265b231f03859"
 dependencies = [
  "byteorder",
  "crc",
- "crossbeam-channel",
+ "crossbeam-channel 0.4.4",
  "lazy_static",
  "log",
  "rand 0.7.3",
- "rand_pcg",
+ "rand_pcg 0.2.1",
+]
+
+[[package]]
+name = "laminar"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71d69057e558ecedbfe60be623439685d1e61392887b21fc007c072d6b04ff4a"
+dependencies = [
+ "byteorder",
+ "crc",
+ "crossbeam-channel 0.5.1",
+ "lazy_static",
+ "log",
+ "rand 0.8.4",
+ "rand_pcg 0.3.1",
 ]
 
 [[package]]
@@ -1194,9 +1229,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.97"
+version = "0.2.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12b8adadd720df158f4d70dfe7ccc6adb0472d7c55ca83445f6a5ab3e36f8fb6"
+checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
 
 [[package]]
 name = "libloading"
@@ -1751,6 +1786,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_pcg"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
+dependencies = [
+ "rand_core 0.6.3",
+]
+
+[[package]]
 name = "range-alloc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1849,7 +1893,7 @@ dependencies = [
 [[package]]
 name = "simple-game"
 version = "0.1.0"
-source = "git+https://github.com/bschwind/simple-game?branch=bevy#6630a5908384d18ce23bde69d791ae2b5bec0584"
+source = "git+https://github.com/bschwind/simple-game?branch=bevy#ac1433c16f5b6eb04d995533153128aa63e8d34b"
 dependencies = [
  "bevy_app",
  "bevy_core",
@@ -1977,7 +2021,7 @@ name = "sus-client"
 version = "0.1.0"
 dependencies = [
  "bincode",
- "laminar",
+ "laminar 0.4.0",
  "simple-game",
  "sus-common",
 ]
@@ -1994,7 +2038,9 @@ name = "sus-server"
 version = "0.1.0"
 dependencies = [
  "bincode",
- "laminar",
+ "crossbeam-channel 0.5.1",
+ "laminar 0.5.0",
+ "simple-game",
  "sus-common",
 ]
 
