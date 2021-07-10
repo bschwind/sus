@@ -1,8 +1,8 @@
 use crossbeam_channel::{Receiver, Sender};
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use simple_game::bevy::{
-    App, AppBuilder, Commands, CorePlugin, EventReader, EventWriter, FixedTimestep,
-    HeadlessBevyGame, IntoSystem, ResMut, SystemSet,
+    bevy_ecs, App, AppBuilder, Commands, CorePlugin, EventReader, EventWriter, FixedTimestep,
+    HeadlessBevyGame, IntoSystem, ResMut, SystemLabel, SystemSet,
 };
 use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Duration};
 use sus_common::{
@@ -22,6 +22,11 @@ struct SusServer {
     net_rx: Receiver<SocketEvent>,
     players: HashMap<SocketAddr, Player>,
     id_counter: u16,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, SystemLabel)]
+enum GameLabel {
+    Network,
 }
 
 struct PlayerInput {
@@ -158,7 +163,7 @@ fn update_network(
     mut new_player_tx: EventWriter<NewPlayer>,
     mut input_tx: EventWriter<PlayerInput>,
 ) {
-    if let Ok(event) = server.net_rx.recv() {
+    while let Ok(event) = server.net_rx.try_recv() {
         match event {
             SocketEvent::Packet(packet) => {
                 let msg = packet.payload();
