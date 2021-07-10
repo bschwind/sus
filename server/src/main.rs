@@ -2,7 +2,7 @@ use crossbeam_channel::{Receiver, Sender};
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use simple_game::bevy::{
     bevy_ecs, App, AppBuilder, Commands, CorePlugin, EventReader, EventWriter, FixedTimestep,
-    HeadlessBevyGame, IntoSystem, ResMut, SystemLabel, SystemSet,
+    HeadlessBevyGame, IntoSystem, ParallelSystemDescriptorCoercion, ResMut, SystemLabel, SystemSet,
 };
 use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Duration};
 use sus_common::{
@@ -24,9 +24,14 @@ struct SusServer {
     id_counter: u16,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, SystemLabel)]
-enum GameLabel {
-    Network,
+#[derive(Clone, Hash, Debug, PartialEq, Eq, SystemLabel)]
+struct Network;
+
+#[derive(Clone, Hash, Debug, PartialEq, Eq, SystemLabel)]
+enum NetworkSystem {
+    Receive,
+    PlayerInput,
+    NewPlayer,
 }
 
 struct PlayerInput {
@@ -50,13 +55,24 @@ impl HeadlessBevyGame for SusServer {
             .add_startup_system(init.system())
             .add_system_set(
                 SystemSet::new()
+                    .label(Network)
                     .with_run_criteria(
                         FixedTimestep::step(1.0 / Self::desired_fps() as f64)
                             .with_label("game_timestep"),
                     )
-                    .with_system(update_network.system()) // TOOD(bschwind) - Enforce ordering on network systems
-                    .with_system(handle_player_input.system())
-                    .with_system(handle_new_player.system()),
+                    .with_system(update_network.system().label(NetworkSystem::Receive))
+                    .with_system(
+                        handle_player_input
+                            .system()
+                            .label(NetworkSystem::PlayerInput)
+                            .after(NetworkSystem::Receive),
+                    )
+                    .with_system(
+                        handle_new_player
+                            .system()
+                            .label(NetworkSystem::NewPlayer)
+                            .after(NetworkSystem::Receive),
+                    ),
             );
 
         ecs_world_builder
