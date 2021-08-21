@@ -9,4 +9,4 @@ bincode = "1"
 crossbeam-channel = "0.5"
 laminar = "0.5"
 sus-common = { path = "../common" }
-simple-game = { git = "https://github.com/bschwind/simple-game", branch = "bevy", features = ["bevy"] }
+simple-game = { git = "https://github.com/bschwind/simple-game", branch = "master", features = ["bevy"] }
