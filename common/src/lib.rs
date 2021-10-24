@@ -48,8 +48,8 @@ pub struct PlayerInput {
     pub right: bool,
 }
 
-impl PlayerInput {
-    pub fn new() -> Self {
+impl Default for PlayerInput {
+    fn default() -> Self {
         Self { up: false, down: false, left: false, right: false }
     }
 }
@@ -70,16 +70,5 @@ impl From<&PlayerInput> for PlayerInputPacket {
                 (false, false) => 0,
             },
         }
-    }
-}
-
-pub struct Game {
-    players: Vec<Player>,
-    game_state: GameState,
-}
-
-impl Game {
-    pub fn new() -> Self {
-        Self { players: Vec::new(), game_state: GameState::Lobby }
     }
 }

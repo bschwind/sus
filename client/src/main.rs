@@ -69,7 +69,7 @@ fn init(mut commands: Commands, graphics_device: Res<GraphicsDevice>) {
 
     let text_system: TextSystem = TextSystem::new(&graphics_device);
     let fullscreen_quad = FullscreenQuad::new(&graphics_device);
-    let player_input = PlayerInput::new();
+    let player_input = PlayerInput::default();
 
     let socket = initialize_network(&game);
 
