@@ -1,7 +1,11 @@
 use crate::systems::labels;
-use simple_game::bevy::{AppBuilder, FixedTimestep, IntoSystem, Plugin, SystemSet};
+use simple_game::bevy::{
+    schedule::State, AppBuilder, Commands, IntoSystem, Plugin, Query, ResMut, SystemSet,
+};
+use std::time::{Duration, Instant};
 use sus_common::GameState;
 
+#[allow(unused)]
 pub struct LobbyPlugin {
     fixed_timestep: f64,
 }
@@ -18,9 +22,12 @@ impl Plugin for LobbyPlugin {
             .add_system_set(SystemSet::on_enter(GameState::Lobby).with_system(setup_lobby.system()))
             .add_system_set(
                 SystemSet::on_update(GameState::Lobby)
-                    .with_run_criteria(
-                        FixedTimestep::step(self.fixed_timestep).with_label("lobby_timestep"),
-                    )
+                    // TODO(bschwind) - Unfortunately, this doesn't play
+                    // nicely with Bevy's State-based RunCriteria. You can'
+                    // have a FixedTimestep and state-based run criteria?
+                    // .with_run_criteria(
+                    //     FixedTimestep::step(self.fixed_timestep).with_label("lobby_timestep"),
+                    // )
                     .label(labels::Lobby)
                     .after(labels::Network)
                     .with_system(update_lobby.system()),
@@ -29,12 +36,26 @@ impl Plugin for LobbyPlugin {
     }
 }
 
-fn setup() {}
+struct LobbyTimer(Instant);
+const LOBBY_COUNTDOWN_TIME: Duration = Duration::from_secs(3);
+
+fn setup(mut commands: Commands) {
+    commands.spawn().insert(LobbyTimer(Instant::now()));
+}
 
 fn setup_lobby() {
     println!("Lobby started");
 }
 
-fn update_lobby() {}
+fn update_lobby(mut game_state: ResMut<State<GameState>>, lobby_timer: Query<&LobbyTimer>) {
+    let lobby_timer = lobby_timer.single().unwrap().0;
+
+    if lobby_timer.elapsed() > LOBBY_COUNTDOWN_TIME {
+        println!("Leaving lobby!");
+        if game_state.current() == &GameState::Lobby {
+            game_state.set(GameState::IntroScreen).unwrap();
+        }
+    }
+}
 
 fn close_lobby() {}
