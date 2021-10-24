@@ -39,6 +39,7 @@ impl Plugin for NetworkPlugin {
         app.add_startup_system(setup.system())
             .add_event::<PlayerInput>()
             .add_event::<NewPlayer>()
+            .add_event::<OutgoingPacket>()
             .add_system_set(
                 SystemSet::new()
                     .label(labels::Network)
@@ -55,6 +56,12 @@ impl Plugin for NetworkPlugin {
                             .label(labels::NetworkSystem::NewPlayer)
                             .after(labels::NetworkSystem::Receive),
                     ),
+            )
+            .add_system(
+                network_send
+                    .system()
+                    .label(labels::NetworkSystem::SendPackets)
+                    .after(labels::Lobby), // TODO - Use better ordering here.
             );
     }
 }
@@ -92,12 +99,11 @@ fn handle_player_input(mut input_rx: EventReader<PlayerInput>) {
 fn handle_new_player(
     mut players: ResMut<AddrToPlayer>,
     mut player_id_counter: ResMut<PlayerIdCounter>,
-    net_tx: ResMut<NetTx>,
+    mut outgoing_packets: EventWriter<OutgoingPacket>,
     mut new_player_rx: EventReader<NewPlayer>,
 ) {
     let players = &mut players.0;
     let player_id_counter = &mut player_id_counter.0;
-    let net_tx = &net_tx.0;
 
     for new_player in new_player_rx.iter() {
         let addr = new_player.addr;
@@ -117,9 +123,8 @@ fn handle_new_player(
             *player_id_counter += 1;
 
             let reply = ServerToClient::ConnectAck;
-            net_tx
-                .send(Packet::reliable_ordered(addr, bincode::serialize(&reply).unwrap(), None))
-                .expect("Failed to send ConnectAck");
+
+            outgoing_packets.send(OutgoingPacket::new(addr, reply, DeliveryType::ReliableOrdered));
 
             // Send all existing state to new client
             let players_vec = players
@@ -129,13 +134,12 @@ fn handle_new_player(
 
             let full_state_packet =
                 ServerToClient::FullGameState(FullGameStatePacket::new(players_vec));
-            net_tx
-                .send(Packet::reliable_ordered(
-                    addr,
-                    bincode::serialize(&full_state_packet).unwrap(),
-                    None,
-                ))
-                .expect("Failed to send ConnectAck");
+
+            outgoing_packets.send(OutgoingPacket::new(
+                addr,
+                full_state_packet,
+                DeliveryType::ReliableOrdered,
+            ));
 
             // Tell all other players this one has connected
             let new_player_packet = ServerToClient::NewPlayer(NewPlayerPacket::new(
@@ -146,13 +150,11 @@ fn handle_new_player(
 
             for player_addr in players.keys() {
                 if *player_addr != addr {
-                    net_tx
-                        .send(Packet::reliable_ordered(
-                            *player_addr,
-                            bincode::serialize(&new_player_packet).unwrap(),
-                            None,
-                        ))
-                        .expect("Failed to send ConnectAck");
+                    outgoing_packets.send(OutgoingPacket::new(
+                        *player_addr,
+                        new_player_packet.clone(),
+                        DeliveryType::ReliableOrdered,
+                    ));
                 }
             }
         }
@@ -205,6 +207,62 @@ fn network_receive(
                     println!("Unknown player disconnected: {}", addr);
                 }
             },
+        }
+    }
+}
+
+struct OutgoingPacket {
+    addr: SocketAddr,
+    packet: ServerToClient,
+    delivery_type: DeliveryType,
+}
+
+impl OutgoingPacket {
+    pub fn new(addr: SocketAddr, packet: ServerToClient, delivery_type: DeliveryType) -> Self {
+        Self { addr, packet, delivery_type }
+    }
+}
+
+#[allow(unused)]
+enum DeliveryType {
+    ReliableOrdered,
+    ReliableSequenced,
+    ReliableUnordered,
+    Unreliable,
+    UnreliableSequenced,
+}
+
+fn network_send(net_tx: Res<NetTx>, mut outgoing_packets: EventReader<OutgoingPacket>) {
+    let net_tx = &net_tx.0;
+
+    for outgoing in outgoing_packets.iter() {
+        let packet = match outgoing.delivery_type {
+            DeliveryType::ReliableOrdered => Packet::reliable_ordered(
+                outgoing.addr,
+                bincode::serialize(&outgoing.packet).unwrap(),
+                None,
+            ),
+            DeliveryType::ReliableSequenced => Packet::reliable_sequenced(
+                outgoing.addr,
+                bincode::serialize(&outgoing.packet).unwrap(),
+                None,
+            ),
+            DeliveryType::ReliableUnordered => Packet::reliable_unordered(
+                outgoing.addr,
+                bincode::serialize(&outgoing.packet).unwrap(),
+            ),
+            DeliveryType::Unreliable => {
+                Packet::unreliable(outgoing.addr, bincode::serialize(&outgoing.packet).unwrap())
+            },
+            DeliveryType::UnreliableSequenced => Packet::unreliable_sequenced(
+                outgoing.addr,
+                bincode::serialize(&outgoing.packet).unwrap(),
+                None,
+            ),
+        };
+
+        if let Err(e) = net_tx.send(packet) {
+            println!("Failed to send packet: {:?}", e);
         }
     }
 }

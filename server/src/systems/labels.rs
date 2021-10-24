@@ -11,4 +11,5 @@ pub enum NetworkSystem {
     Receive,
     PlayerInput,
     NewPlayer,
+    SendPackets,
 }

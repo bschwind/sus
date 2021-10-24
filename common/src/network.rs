@@ -5,7 +5,7 @@ pub const INPUT_STREAM: u8 = 0;
 pub const CHAT_STREAM: u8 = 1;
 pub const VOICE_STREAM: u8 = 2;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerToClient {
     ConnectAck,
     NewPlayer(NewPlayerPacket),
@@ -13,7 +13,7 @@ pub enum ServerToClient {
     PlayerMovement,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewPlayerPacket {
     pub name: String,
     pub id: u16,
@@ -28,7 +28,7 @@ impl NewPlayerPacket {
 
 // Only needed for players joining the lobby, because currently
 // players can't join a session in progress.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FullGameStatePacket {
     pub players: Vec<NewPlayerPacket>,
 }
