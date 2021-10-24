@@ -2,6 +2,7 @@ use crate::network::PlayerInputPacket;
 
 pub mod network;
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum GameState {
     Lobby,
     IntroScreen,
