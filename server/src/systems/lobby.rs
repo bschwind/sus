@@ -1,6 +1,8 @@
-use crate::systems::labels;
+use crate::systems::{fixed_timestep_with_state, labels};
 use simple_game::bevy::{
-    schedule::State, AppBuilder, Commands, IntoSystem, Plugin, Query, ResMut, SystemSet,
+    schedule::{ShouldRun, State},
+    AppBuilder, Commands, FixedTimestep, In, IntoChainSystem, IntoSystem, Plugin, Query, Res,
+    ResMut, SystemSet,
 };
 use std::time::{Duration, Instant};
 use sus_common::GameState;
@@ -21,13 +23,11 @@ impl Plugin for LobbyPlugin {
         app.add_startup_system(setup.system())
             .add_system_set(SystemSet::on_enter(GameState::Lobby).with_system(setup_lobby.system()))
             .add_system_set(
-                SystemSet::on_update(GameState::Lobby)
-                    // TODO(bschwind) - Unfortunately, this doesn't play
-                    // nicely with Bevy's State-based RunCriteria. You can'
-                    // have a FixedTimestep and state-based run criteria?
-                    // .with_run_criteria(
-                    //     FixedTimestep::step(self.fixed_timestep).with_label("lobby_timestep"),
-                    // )
+                SystemSet::new()
+                    .with_run_criteria(fixed_timestep_with_state!(
+                        self.fixed_timestep,
+                        GameState::Lobby,
+                    ))
                     .label(labels::Lobby)
                     .after(labels::Network)
                     .with_system(update_lobby.system()),
