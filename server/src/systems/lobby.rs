@@ -1,14 +1,15 @@
 use crate::{
     components::{PlayerBundle, PlayerId, PlayerName, PlayerNetworkAddr},
     systems::{
-        labels,
+        fixed_timestep_with_state, labels,
         network::{DeliveryType, NewPlayer, OutgoingPacket, PlayerIdCounter},
         PacketDestination,
     },
 };
 use simple_game::bevy::{
-    schedule::State, AppBuilder, Commands, EventReader, EventWriter, IntoSystem, Plugin, Query,
-    ResMut, SystemSet,
+    schedule::{ShouldRun, State},
+    AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem, IntoSystem,
+    Plugin, Query, Res, ResMut, SystemSet,
 };
 use std::time::{Duration, Instant};
 use sus_common::{
@@ -32,12 +33,11 @@ impl Plugin for LobbyPlugin {
         app.add_startup_system(setup.system())
             .add_system_set(SystemSet::on_enter(GameState::Lobby).with_system(setup_lobby.system()))
             .add_system_set(
-                SystemSet::on_update(GameState::Lobby)
-                // SystemSet::new()
-                    // .with_run_criteria(fixed_timestep_with_state!(
-                    //     self.fixed_timestep,
-                    //     GameState::Lobby,
-                    // ))
+                SystemSet::new()
+                    .with_run_criteria(fixed_timestep_with_state!(
+                        self.fixed_timestep,
+                        GameState::Lobby,
+                    ))
                     .label(labels::Lobby)
                     .after(labels::Network)
                     .with_system(update_lobby.system())
@@ -48,7 +48,7 @@ impl Plugin for LobbyPlugin {
 }
 
 struct LobbyTimer(Instant);
-const LOBBY_COUNTDOWN_TIME: Duration = Duration::from_secs(5);
+const LOBBY_COUNTDOWN_TIME: Duration = Duration::from_secs(50);
 
 fn setup(mut commands: Commands) {
     commands.spawn().insert(LobbyTimer(Instant::now()));
