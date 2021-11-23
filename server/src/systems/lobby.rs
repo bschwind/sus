@@ -1,17 +1,23 @@
 use crate::{
-    components::{PlayerBundle, PlayerId, PlayerName, PlayerNetworkAddr},
+    components::{
+        AddrToPlayer, PlayerBundle, PlayerId, PlayerName, PlayerNetworkAddr, PlayerToEntity,
+        UnprocessedInputs,
+    },
     systems::{
         fixed_timestep_with_state, labels,
         network::{DeliveryType, NewPlayer, OutgoingPacket, PlayerIdCounter},
-        PacketDestination,
+        PacketDestination, PlayerInput,
     },
 };
 use simple_game::bevy::{
     schedule::{ShouldRun, State},
     AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem, IntoSystem,
-    Plugin, Query, Res, ResMut, SystemSet,
+    ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
 };
-use std::time::{Duration, Instant};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 use sus_common::{
     network::{FullGameStatePacket, NewPlayerPacket, ServerToClient},
     GameState,
@@ -41,6 +47,12 @@ impl Plugin for LobbyPlugin {
                     .label(labels::Lobby)
                     .after(labels::Network)
                     .with_system(update_lobby.system())
+                    .with_system(
+                        handle_player_input
+                            .system()
+                            .label(labels::NetworkSystem::PlayerInput)
+                            .after(labels::NetworkSystem::Receive),
+                    )
                     .with_system(new_player_joined.system()),
             )
             .add_system_set(SystemSet::on_exit(GameState::Lobby).with_system(close_lobby.system()));
@@ -58,7 +70,12 @@ fn setup_lobby() {
     println!("Lobby started");
 }
 
-fn update_lobby(mut game_state: ResMut<State<GameState>>, lobby_timer: Query<&LobbyTimer>) {
+fn update_lobby(
+    mut game_state: ResMut<State<GameState>>,
+    lobby_timer: Query<&LobbyTimer>,
+    mut players: Query<(&PlayerId, &mut UnprocessedInputs)>,
+) {
+    println!("Lobby tick");
     let lobby_timer = lobby_timer.single().unwrap().0;
 
     if lobby_timer.elapsed() > LOBBY_COUNTDOWN_TIME {
@@ -67,11 +84,35 @@ fn update_lobby(mut game_state: ResMut<State<GameState>>, lobby_timer: Query<&Lo
             game_state.set(GameState::IntroScreen).unwrap();
         }
     }
+
+    for (player_id, mut unprocessed_inputs) in players.iter_mut() {
+        if let Some(input) = unprocessed_inputs.0.pop_front() {
+            println!("Moving player ID {} with input {:?}", player_id.0, input);
+        }
+    }
+}
+
+fn handle_player_input(
+    mut input_rx: EventReader<PlayerInput>,
+    player_to_entity: Res<PlayerToEntity>,
+    mut unprocessed_inputs: Query<&mut UnprocessedInputs>,
+) {
+    for event in input_rx.iter() {
+        if let Some(player_entity) = player_to_entity.0.get(&event.id) {
+            println!("Player (id={}) sent input: {:?}", event.id, event.input);
+
+            if let Ok(mut unprocessed_input) = unprocessed_inputs.get_mut(*player_entity) {
+                unprocessed_input.0.push_back(event.input);
+            }
+        }
+    }
 }
 
 fn new_player_joined(
     mut commands: Commands,
     mut new_player_rx: EventReader<NewPlayer>,
+    mut players: ResMut<AddrToPlayer>,
+    mut player_to_entity: ResMut<PlayerToEntity>,
     mut player_id_counter: ResMut<PlayerIdCounter>,
     mut outgoing_packets: EventWriter<OutgoingPacket>,
     existing_players: Query<(&PlayerName, &PlayerId)>,
@@ -84,11 +125,19 @@ fn new_player_joined(
 
         println!("Spawning new player with id {}", new_player_id);
 
-        commands.spawn().insert_bundle(PlayerBundle {
-            id: PlayerId(new_player_id),
-            name: PlayerName(new_player.connect_packet.name.clone()),
-            network_addr: PlayerNetworkAddr(new_player.addr),
-        });
+        let entity_id = commands
+            .spawn()
+            .insert_bundle(PlayerBundle {
+                id: PlayerId(new_player_id),
+                name: PlayerName(new_player.connect_packet.name.clone()),
+                network_addr: PlayerNetworkAddr(new_player.addr),
+                unprocessed_inputs: UnprocessedInputs(VecDeque::new()),
+            })
+            .id();
+
+        // TODO - handle this HashMap cleanup on player disconnect.
+        players.0.insert(new_player.addr, new_player_id);
+        player_to_entity.0.insert(new_player_id, entity_id);
 
         let reply = ServerToClient::ConnectAck;
         outgoing_packets.send(OutgoingPacket::new(

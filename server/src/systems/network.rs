@@ -1,4 +1,7 @@
-use crate::{components::PlayerNetworkAddr, systems::labels};
+use crate::{
+    components::{AddrToPlayer, PlayerNetworkAddr, PlayerToEntity},
+    systems::labels,
+};
 use crossbeam_channel::{Receiver, Sender};
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use simple_game::bevy::{
@@ -6,10 +9,7 @@ use simple_game::bevy::{
     Plugin, Query, Res, ResMut, SystemSet,
 };
 use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Duration};
-use sus_common::{
-    network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
-    Player,
-};
+use sus_common::network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient};
 
 const BIND_ADDR: &str = "0.0.0.0:7600";
 
@@ -18,7 +18,6 @@ pub struct NetworkPlugin;
 struct NetworkThread(JoinHandle<()>);
 struct NetTx(Sender<laminar::Packet>);
 struct NetRx(Receiver<SocketEvent>);
-struct AddrToPlayer(HashMap<SocketAddr, Player>);
 pub struct PlayerIdCounter(pub u16);
 
 pub struct NewPlayer {
@@ -26,9 +25,10 @@ pub struct NewPlayer {
     pub connect_packet: ConnectPacket,
 }
 
-struct PlayerInput {
-    id: u16,
-    input: PlayerInputPacket,
+#[derive(Debug)]
+pub struct PlayerInput {
+    pub id: u16,
+    pub input: PlayerInputPacket,
 }
 
 impl Plugin for NetworkPlugin {
@@ -40,13 +40,7 @@ impl Plugin for NetworkPlugin {
             .add_system_set(
                 SystemSet::new()
                     .label(labels::Network)
-                    .with_system(network_receive.system().label(labels::NetworkSystem::Receive))
-                    .with_system(
-                        handle_player_input
-                            .system()
-                            .label(labels::NetworkSystem::PlayerInput)
-                            .after(labels::NetworkSystem::Receive),
-                    ),
+                    .with_system(network_receive.system().label(labels::NetworkSystem::Receive)),
             )
             .add_system(
                 network_send
@@ -67,6 +61,7 @@ fn setup(mut commands: Commands) {
     commands.insert_resource(NetTx(net_tx));
     commands.insert_resource(NetRx(net_rx));
     commands.insert_resource(AddrToPlayer(HashMap::new()));
+    commands.insert_resource(PlayerToEntity(HashMap::new()));
     commands.insert_resource(PlayerIdCounter(0));
 }
 
@@ -81,12 +76,6 @@ fn initialize_network() -> Socket {
     Socket::bind_with_config(BIND_ADDR, net_config).expect("Couldn't bind to server BIND_ADDR")
 }
 
-fn handle_player_input(mut input_rx: EventReader<PlayerInput>) {
-    for event in input_rx.iter() {
-        println!("Player (id={}) sent input: {:?}", event.id, event.input);
-    }
-}
-
 fn network_receive(
     mut players: ResMut<AddrToPlayer>,
     net_rx: Res<NetRx>,
@@ -95,6 +84,8 @@ fn network_receive(
 ) {
     let players = &mut players.0;
     let net_rx = &net_rx.0;
+
+    println!("Network tick");
 
     while let Ok(event) = net_rx.try_recv() {
         match event {
@@ -108,8 +99,8 @@ fn network_receive(
                         },
                         ClientToServer::PlayerInput(input) => {
                             // TODO - the players HashMap is no longer populated.
-                            if let Some(player) = players.get(&packet.addr()) {
-                                input_tx.send(PlayerInput { id: player.id, input });
+                            if let Some(player_id) = players.get(&packet.addr()) {
+                                input_tx.send(PlayerInput { id: *player_id, input });
                             }
                         },
                     }
@@ -118,8 +109,8 @@ fn network_receive(
                 }
             },
             SocketEvent::Timeout(addr) => {
-                if let Some(player) = players.get(&addr) {
-                    println!("{} ({}) timed out", player.name, addr);
+                if let Some(player_id) = players.get(&addr) {
+                    println!("{} ({}) timed out", player_id, addr);
                 } else {
                     println!("Unknown player timed out: {}", addr);
                 }
@@ -128,8 +119,8 @@ fn network_receive(
                 println!("Client connected: {}", addr);
             },
             SocketEvent::Disconnect(addr) => {
-                if let Some(player) = players.remove(&addr) {
-                    println!("Player {} disconnected ({})", player.name, addr);
+                if let Some(player_id) = players.remove(&addr) {
+                    println!("Player {} disconnected ({})", player_id, addr);
                 } else {
                     println!("Unknown player disconnected: {}", addr);
                 }

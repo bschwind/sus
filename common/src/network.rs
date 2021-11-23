@@ -57,7 +57,7 @@ impl ConnectPacket {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerInputPacket {
     pub x: i16,
     pub y: i16,
