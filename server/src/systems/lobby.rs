@@ -1,7 +1,7 @@
 use crate::{
     components::{
-        AddrToPlayer, PlayerBundle, PlayerId, PlayerName, PlayerNetworkAddr, PlayerToEntity,
-        UnprocessedInputs,
+        AddrToPlayer, LastInputCounter, PlayerBundle, PlayerId, PlayerName, PlayerNetworkAddr,
+        PlayerToEntity, UnprocessedInputs,
     },
     systems::{
         fixed_timestep_with_state, labels,
@@ -19,7 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use sus_common::{
-    network::{FullGameStatePacket, NewPlayerPacket, ServerToClient},
+    network::{FullGameStatePacket, LobbyTickPacket, NewPlayerPacket, SequenceCmp, ServerToClient},
     GameState,
 };
 
@@ -46,13 +46,14 @@ impl Plugin for LobbyPlugin {
                     ))
                     .label(labels::Lobby)
                     .after(labels::Network)
-                    .with_system(update_lobby.system())
                     .with_system(
                         handle_player_input
                             .system()
                             .label(labels::NetworkSystem::PlayerInput)
                             .after(labels::NetworkSystem::Receive),
                     )
+                    .with_system(update_lobby.system().after(labels::NetworkSystem::PlayerInput))
+                    .with_system(send_new_state.system().label(labels::NetworkSystem::SendPackets))
                     .with_system(new_player_joined.system()),
             )
             .add_system_set(SystemSet::on_exit(GameState::Lobby).with_system(close_lobby.system()));
@@ -73,7 +74,7 @@ fn setup_lobby() {
 fn update_lobby(
     mut game_state: ResMut<State<GameState>>,
     lobby_timer: Query<&LobbyTimer>,
-    mut players: Query<(&PlayerId, &mut UnprocessedInputs)>,
+    mut players: Query<(&PlayerId, &mut UnprocessedInputs, &mut LastInputCounter)>,
 ) {
     println!("Lobby tick");
     let lobby_timer = lobby_timer.single().unwrap().0;
@@ -85,10 +86,29 @@ fn update_lobby(
         }
     }
 
-    for (player_id, mut unprocessed_inputs) in players.iter_mut() {
+    for (player_id, mut unprocessed_inputs, mut last_input_counter) in players.iter_mut() {
         if let Some(input) = unprocessed_inputs.0.pop_front() {
-            println!("Moving player ID {} with input {:?}", player_id.0, input);
+            if input.counter.sequentially_greater_than(last_input_counter.0) {
+                last_input_counter.0 = input.counter;
+                println!("Moving player ID {} with input {:?}", player_id.0, input);
+            }
         }
+    }
+}
+
+fn send_new_state(
+    players: Query<(&PlayerId, &PlayerNetworkAddr, &LastInputCounter)>,
+    mut outgoing_packets: EventWriter<OutgoingPacket>,
+) {
+    for (_player_id, network_addr, last_input_counter) in players.iter() {
+        let packet =
+            ServerToClient::LobbyTick(LobbyTickPacket { last_input_counter: last_input_counter.0 });
+
+        outgoing_packets.send(OutgoingPacket::new(
+            PacketDestination::Single(network_addr.0),
+            packet,
+            DeliveryType::UnreliableSequenced,
+        ));
     }
 }
 
@@ -132,6 +152,7 @@ fn new_player_joined(
                 name: PlayerName(new_player.connect_packet.name.clone()),
                 network_addr: PlayerNetworkAddr(new_player.addr),
                 unprocessed_inputs: UnprocessedInputs(VecDeque::new()),
+                last_input_counter: LastInputCounter(0),
             })
             .id();
 

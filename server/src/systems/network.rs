@@ -98,7 +98,6 @@ fn network_receive(
                             new_player_tx.send(NewPlayer { addr: packet.addr(), connect_packet });
                         },
                         ClientToServer::PlayerInput(input) => {
-                            // TODO - the players HashMap is no longer populated.
                             if let Some(player_id) = players.get(&packet.addr()) {
                                 input_tx.send(PlayerInput { id: *player_id, input });
                             }

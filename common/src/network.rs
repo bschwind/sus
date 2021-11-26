@@ -10,7 +10,7 @@ pub enum ServerToClient {
     ConnectAck,
     NewPlayer(NewPlayerPacket),
     FullGameState(FullGameStatePacket),
-    PlayerMovement,
+    LobbyTick(LobbyTickPacket),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +39,12 @@ impl FullGameStatePacket {
     }
 }
 
+// Sent from the server to every player after every lobby network tick.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LobbyTickPacket {
+    pub last_input_counter: u16,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientToServer {
     Connect(ConnectPacket),
@@ -59,12 +65,41 @@ impl ConnectPacket {
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerInputPacket {
+    pub counter: u16,
     pub x: i16,
     pub y: i16,
 }
 
 impl PlayerInputPacket {
-    pub fn new(x: i16, y: i16) -> Self {
-        Self { x, y }
+    pub fn new(counter: u16, x: i16, y: i16) -> Self {
+        Self { counter, x, y }
+    }
+}
+
+// Helper trait for handling u16 wraparound.
+pub trait SequenceCmp {
+    fn sequentially_greater_than(&self, other: u16) -> bool;
+    fn sequentially_greater_than_or_equal_to(&self, other: u16) -> bool;
+    fn sequentially_less_than(&self, other: u16) -> bool;
+}
+
+impl SequenceCmp for u16 {
+    fn sequentially_greater_than(&self, other: u16) -> bool {
+        let max_half = (u16::max_value() / 2) - 1;
+        ((*self > other) && *self - other <= max_half)
+            || ((other > *self) && other - *self > max_half)
+    }
+
+    fn sequentially_greater_than_or_equal_to(&self, other: u16) -> bool {
+        let max_half = (u16::max_value() / 2) - 1;
+        (*self == other)
+            || ((*self > other) && *self - other <= max_half)
+            || ((other > *self) && other - *self > max_half)
+    }
+
+    fn sequentially_less_than(&self, other: u16) -> bool {
+        let max_half = (u16::max_value() / 2) - 1;
+        ((*self < other) && other - *self <= max_half)
+            || ((*self > other) && *self - other > max_half)
     }
 }

@@ -17,11 +17,14 @@ use std::{
     time::{Duration, Instant},
 };
 use sus_common::{
-    network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
+    network::{ClientToServer, ConnectPacket, ServerToClient},
     PlayerInput,
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:7600";
+
+#[derive(Debug)]
+struct InputCounter(u16);
 
 struct SusGame {
     server_addr: SocketAddr,
@@ -77,6 +80,7 @@ fn init(mut commands: Commands, graphics_device: Res<GraphicsDevice>) {
     commands.insert_resource(text_system);
     commands.insert_resource(fullscreen_quad);
     commands.insert_resource(player_input);
+    commands.insert_resource(InputCounter(0));
     commands.insert_resource(socket);
 }
 
@@ -124,9 +128,13 @@ fn handle_input(
 fn send_input_to_server(
     game: Res<SusGame>,
     player_input: Res<PlayerInput>,
+    mut input_counter: ResMut<InputCounter>,
     mut socket: ResMut<Socket>,
 ) {
-    let input_packet = PlayerInputPacket::from(&*player_input);
+    // TODO(bschwind) - Store unacked inputs in a list
+    let input_packet = player_input.to_player_input_packet(input_counter.0);
+    input_counter.0 = input_counter.0.wrapping_add(1);
+
     let msg = ClientToServer::PlayerInput(input_packet);
 
     socket
@@ -159,8 +167,8 @@ fn update_network(mut game: ResMut<SusGame>, mut socket: ResMut<Socket>) {
                         ServerToClient::FullGameState(full_game_state) => {
                             println!("Full game state: {:?}", full_game_state);
                         },
-                        ServerToClient::PlayerMovement => {
-                            println!("Player moved!");
+                        ServerToClient::LobbyTick(lobby_tick_packet) => {
+                            println!("Lobby tick - {:?}", lobby_tick_packet);
                         },
                     }
                 }

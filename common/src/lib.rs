@@ -54,16 +54,17 @@ impl Default for PlayerInput {
     }
 }
 
-impl From<&PlayerInput> for PlayerInputPacket {
-    fn from(player_input: &PlayerInput) -> Self {
-        Self {
-            x: match (player_input.left, player_input.right) {
+impl PlayerInput {
+    pub fn to_player_input_packet(&self, counter: u16) -> PlayerInputPacket {
+        PlayerInputPacket {
+            counter,
+            x: match (self.left, self.right) {
                 (true, true) => 0,
                 (true, false) => i16::MIN,
                 (false, true) => i16::MAX,
                 (false, false) => 0,
             },
-            y: match (player_input.up, player_input.down) {
+            y: match (self.up, self.down) {
                 (true, true) => 0,
                 (true, false) => i16::MAX,
                 (false, true) => i16::MIN,
