@@ -13,16 +13,21 @@ pub enum ServerToClient {
     LobbyTick(LobbyTickPacket),
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ClientToServer {
+    Connect(ConnectPacket),
+    PlayerInput(PlayerInputPacket),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewPlayerPacket {
     pub name: String,
     pub id: u16,
-    pub pos: (i32, i32),
 }
 
 impl NewPlayerPacket {
-    pub fn new(name: String, id: u16, pos: (i32, i32)) -> Self {
-        Self { name, id, pos }
+    pub fn new(name: String, id: u16) -> Self {
+        Self { name, id }
     }
 }
 
@@ -43,12 +48,13 @@ impl FullGameStatePacket {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LobbyTickPacket {
     pub last_input_counter: u16,
+    pub players: Vec<LobbyPlayer>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ClientToServer {
-    Connect(ConnectPacket),
-    PlayerInput(PlayerInputPacket),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LobbyPlayer {
+    pub id: u16,
+    pub pos: (f32, f32),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

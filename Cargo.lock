@@ -191,7 +191,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb36a879cdc96f554b62dd7c7c02392a9a10e94082e4bc686a8242e1d674e7cc"
 dependencies = [
  "bevy_reflect",
- "glam 0.13.1",
+ "glam",
 ]
 
 [[package]]
@@ -204,7 +204,7 @@ dependencies = [
  "bevy_utils",
  "downcast-rs",
  "erased-serde",
- "glam 0.13.1",
+ "glam",
  "parking_lot",
  "serde",
  "smallvec",
@@ -237,6 +237,20 @@ dependencies = [
  "instant",
  "num_cpus",
  "wasm-bindgen-futures",
+]
+
+[[package]]
+name = "bevy_transform"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d166fe11f67dc195b42207e7b096f36680f611afc8f4105b3d81865b66ecf91"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_math",
+ "bevy_reflect",
+ "bevy_utils",
+ "smallvec",
 ]
 
 [[package]]
@@ -798,20 +812,11 @@ dependencies = [
 
 [[package]]
 name = "glam"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ad8819b352632f676098176a51e11e324e8cee4c2518dd67e58c36b848438e6"
-dependencies = [
- "bytemuck",
- "version_check",
-]
-
-[[package]]
-name = "glam"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70155b56080764b8b758e91e4c63d06da0262c0c939f2cd991cd1382087147df"
 dependencies = [
+ "bytemuck",
  "serde",
  "spirv-std",
 ]
@@ -1703,14 +1708,15 @@ dependencies = [
 [[package]]
 name = "simple-game"
 version = "0.1.0"
-source = "git+https://github.com/bschwind/simple-game?branch=master#32835e6f1f458308e7c76b5e5ccce1e259165375"
+source = "git+https://github.com/bschwind/simple-game?branch=master#593aa4519e1c5f3c9f468712e36b5871318d7e16"
 dependencies = [
  "bevy_app",
  "bevy_core",
  "bevy_ecs",
+ "bevy_transform",
  "bytemuck",
  "fontdue",
- "glam 0.12.0",
+ "glam",
  "naga",
  "png-decoder",
  "pollster",

@@ -1,5 +1,6 @@
 use crate::network::PlayerInputPacket;
 
+pub mod math;
 pub mod network;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

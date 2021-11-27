@@ -1,4 +1,4 @@
-use simple_game::bevy::{bevy_ecs, Bundle, Entity};
+use simple_game::bevy::{bevy_ecs, Bundle, Entity, Transform};
 use std::{
     collections::{HashMap, VecDeque},
     net::SocketAddr,
@@ -27,7 +27,7 @@ pub struct PlayerBundle {
     pub network_addr: PlayerNetworkAddr,
     pub unprocessed_inputs: UnprocessedInputs,
     pub last_input_counter: LastInputCounter,
-    // transform
+    pub transform: Transform,
 }
 
 pub struct AddrToPlayer(pub HashMap<SocketAddr, u16>);

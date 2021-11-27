@@ -9,17 +9,25 @@ use crate::{
         PacketDestination, PlayerInput,
     },
 };
-use simple_game::bevy::{
-    schedule::{ShouldRun, State},
-    AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem, IntoSystem,
-    ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
+use simple_game::{
+    bevy::{
+        schedule::{ShouldRun, State},
+        AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem,
+        IntoSystem, ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
+        Transform,
+    },
+    glam::{vec3, Vec3},
 };
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
 };
 use sus_common::{
-    network::{FullGameStatePacket, LobbyTickPacket, NewPlayerPacket, SequenceCmp, ServerToClient},
+    math::NormalizedInt,
+    network::{
+        FullGameStatePacket, LobbyPlayer, LobbyTickPacket, NewPlayerPacket, SequenceCmp,
+        ServerToClient,
+    },
     GameState,
 };
 
@@ -74,7 +82,7 @@ fn setup_lobby() {
 fn update_lobby(
     mut game_state: ResMut<State<GameState>>,
     lobby_timer: Query<&LobbyTimer>,
-    mut players: Query<(&PlayerId, &mut UnprocessedInputs, &mut LastInputCounter)>,
+    mut players: Query<(&PlayerId, &mut Transform, &mut UnprocessedInputs, &mut LastInputCounter)>,
 ) {
     println!("Lobby tick");
     let lobby_timer = lobby_timer.single().unwrap().0;
@@ -86,23 +94,38 @@ fn update_lobby(
         }
     }
 
-    for (player_id, mut unprocessed_inputs, mut last_input_counter) in players.iter_mut() {
+    for (player_id, mut transform, mut unprocessed_inputs, mut last_input_counter) in
+        players.iter_mut()
+    {
         if let Some(input) = unprocessed_inputs.0.pop_front() {
             if input.counter.sequentially_greater_than(last_input_counter.0) {
                 last_input_counter.0 = input.counter;
                 println!("Moving player ID {} with input {:?}", player_id.0, input);
+
+                let velocity = vec3(input.x.normalized(), input.y.normalized(), 0.0);
+                transform.translation += velocity;
             }
         }
     }
 }
 
 fn send_new_state(
-    players: Query<(&PlayerId, &PlayerNetworkAddr, &LastInputCounter)>,
+    players: Query<(&PlayerId, &Transform, &PlayerNetworkAddr, &LastInputCounter)>,
     mut outgoing_packets: EventWriter<OutgoingPacket>,
 ) {
-    for (_player_id, network_addr, last_input_counter) in players.iter() {
-        let packet =
-            ServerToClient::LobbyTick(LobbyTickPacket { last_input_counter: last_input_counter.0 });
+    let players_vec: Vec<_> = players
+        .iter()
+        .map(|(id, transform, _, _)| LobbyPlayer {
+            id: id.0,
+            pos: (transform.translation.x, transform.translation.y),
+        })
+        .collect();
+
+    for (_player_id, _transform, network_addr, last_input_counter) in players.iter() {
+        let packet = ServerToClient::LobbyTick(LobbyTickPacket {
+            last_input_counter: last_input_counter.0,
+            players: players_vec.clone(),
+        });
 
         outgoing_packets.send(OutgoingPacket::new(
             PacketDestination::Single(network_addr.0),
@@ -153,6 +176,7 @@ fn new_player_joined(
                 network_addr: PlayerNetworkAddr(new_player.addr),
                 unprocessed_inputs: UnprocessedInputs(VecDeque::new()),
                 last_input_counter: LastInputCounter(0),
+                transform: Transform::from_translation(Vec3::ZERO),
             })
             .id();
 
@@ -170,7 +194,7 @@ fn new_player_joined(
         // Send all existing state to new client
         let players_vec = existing_players
             .iter()
-            .map(|(PlayerName(name), PlayerId(id))| NewPlayerPacket::new(name.clone(), *id, (0, 0)))
+            .map(|(PlayerName(name), PlayerId(id))| NewPlayerPacket::new(name.clone(), *id))
             .collect();
 
         let full_state_packet =
@@ -186,7 +210,6 @@ fn new_player_joined(
         let new_player_packet = ServerToClient::NewPlayer(NewPlayerPacket::new(
             new_player.connect_packet.name.clone(),
             new_player_id,
-            (0, 0),
         ));
 
         outgoing_packets.send(OutgoingPacket::new(
