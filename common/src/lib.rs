@@ -3,6 +3,8 @@ use crate::network::PlayerInputPacket;
 pub mod components;
 pub mod math;
 pub mod network;
+pub mod resources;
+
 pub use simple_game;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

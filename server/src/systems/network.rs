@@ -1,6 +1,6 @@
 use crate::{
     events::{NewPlayer, OutgoingPacket, PlayerInput},
-    resources::{AddrToPlayer, PlayerToEntity},
+    resources::AddrToPlayer,
     systems::labels,
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -9,6 +9,7 @@ use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Durat
 use sus_common::{
     components::player::PlayerNetworkAddr,
     network::ClientToServer,
+    resources::PlayerToEntity,
     simple_game::bevy::{
         AppBuilder, Commands, EventReader, EventWriter, IntoSystem,
         ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,

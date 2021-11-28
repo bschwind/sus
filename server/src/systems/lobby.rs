@@ -1,7 +1,7 @@
 use crate::{
     components::ServerPlayerBundle,
     events::{NewPlayer, OutgoingPacket, PlayerInput},
-    resources::{AddrToPlayer, PlayerToEntity},
+    resources::AddrToPlayer,
     systems::{
         fixed_timestep_with_state, labels,
         network::{DeliveryType, PlayerIdCounter},
@@ -21,6 +21,7 @@ use sus_common::{
         ConnectAckPacket, FullGameStatePacket, LobbyPlayer, LobbyTickPacket, NewPlayerPacket,
         SequenceCmp, ServerToClient,
     },
+    resources::PlayerToEntity,
     simple_game::{
         bevy::{
             schedule::{ShouldRun, State},

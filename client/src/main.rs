@@ -1,9 +1,10 @@
 use crate::{
     components::{ClientPlayerBundle, MyPlayer},
-    resources::InputCounter,
+    resources::{InputCounter, MyName},
 };
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use std::{
+    collections::HashMap,
     net::SocketAddr,
     time::{Duration, Instant},
 };
@@ -13,10 +14,11 @@ use sus_common::{
         ClientToServer, ConnectAckPacket, ConnectPacket, FullGameStatePacket, LobbyTickPacket,
         NewPlayerPacket, ServerToClient,
     },
+    resources::PlayerToEntity,
     simple_game::{
         bevy::{
             App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, EventWriter,
-            FixedTimestep, IntoSystem, Res, ResMut, SystemSet, Transform,
+            FixedTimestep, IntoSystem, Query, Res, ResMut, SystemSet, Transform,
         },
         glam::{vec3, Vec3},
         graphics::{
@@ -76,6 +78,7 @@ impl BevyGame for SusGame {
                     .with_system(handle_connect_ack.system())
                     .with_system(handle_full_game_state.system())
                     .with_system(new_player_joined.system())
+                    .with_system(handle_lobby_tick.system())
                     .with_system(update_game.system()),
             )
             .add_system(render.system());
@@ -92,18 +95,22 @@ fn init(mut commands: Commands, graphics_device: Res<GraphicsDevice>) {
     let fullscreen_quad = FullscreenQuad::new(&graphics_device);
     let player_input = PlayerInput::default();
 
-    let socket = initialize_network(&game);
+    let my_name = "Brian".to_string();
+
+    let socket = initialize_network(&game, &my_name);
 
     commands.insert_resource(game);
     commands.insert_resource(text_system);
     commands.insert_resource(debug_drawer);
     commands.insert_resource(fullscreen_quad);
     commands.insert_resource(player_input);
+    commands.insert_resource(MyName(my_name));
     commands.insert_resource(InputCounter(0));
+    commands.insert_resource(PlayerToEntity(HashMap::new()));
     commands.insert_resource(socket);
 }
 
-fn initialize_network(game: &SusGame) -> Socket {
+fn initialize_network(game: &SusGame, name: &str) -> Socket {
     let net_config = NetworkConfig {
         idle_connection_timeout: Duration::from_secs(5),
         heartbeat_interval: Some(Duration::from_secs(4)),
@@ -113,7 +120,7 @@ fn initialize_network(game: &SusGame) -> Socket {
     let mut socket =
         Socket::bind_with_config("127.0.0.1:0", net_config).expect("Could not connect to server");
 
-    let connect_packet = ClientToServer::Connect(ConnectPacket::new("Brian"));
+    let connect_packet = ClientToServer::Connect(ConnectPacket::new(name));
     socket
         .send(Packet::reliable_ordered(
             game.server_addr,
@@ -165,23 +172,36 @@ fn send_input_to_server(
         .expect("Could not send packet to server");
 }
 
-fn handle_connect_ack(mut commands: Commands, mut connect_ack_rx: EventReader<ConnectAckPacket>) {
+fn handle_connect_ack(
+    mut commands: Commands,
+    mut connect_ack_rx: EventReader<ConnectAckPacket>,
+    my_name: Res<MyName>,
+    mut player_to_entity: ResMut<PlayerToEntity>,
+) {
     for connect_ack in connect_ack_rx.iter() {
-        let _entity_id = commands
+        println!("Got a connect ack");
+
+        let entity_id = commands
             .spawn()
             .insert_bundle(ClientPlayerBundle {
                 id: PlayerId(connect_ack.id),
-                name: PlayerName("Brian".to_string()), // TODO
+                name: PlayerName(my_name.0.clone()),
                 transform: Transform::from_translation(Vec3::ZERO),
             })
             .insert(MyPlayer)
             .id();
+
+        player_to_entity.0.insert(connect_ack.id, entity_id);
     }
 }
 
-fn new_player_joined(mut commands: Commands, mut new_player_rx: EventReader<NewPlayerPacket>) {
+fn new_player_joined(
+    mut commands: Commands,
+    mut new_player_rx: EventReader<NewPlayerPacket>,
+    mut player_to_entity: ResMut<PlayerToEntity>,
+) {
     for new_player in new_player_rx.iter() {
-        let _entity_id = commands
+        let entity_id = commands
             .spawn()
             .insert_bundle(ClientPlayerBundle {
                 id: PlayerId(new_player.id),
@@ -190,16 +210,19 @@ fn new_player_joined(mut commands: Commands, mut new_player_rx: EventReader<NewP
             })
             .insert(MyPlayer)
             .id();
+
+        player_to_entity.0.insert(new_player.id, entity_id);
     }
 }
 
 fn handle_full_game_state(
     mut commands: Commands,
     mut full_game_state_rx: EventReader<FullGameStatePacket>,
+    mut player_to_entity: ResMut<PlayerToEntity>,
 ) {
     for full_game_state in full_game_state_rx.iter() {
         for player in &full_game_state.players {
-            let _entity_id = commands
+            let entity_id = commands
                 .spawn()
                 .insert_bundle(ClientPlayerBundle {
                     id: PlayerId(player.id),
@@ -207,6 +230,24 @@ fn handle_full_game_state(
                     transform: Transform::from_translation(Vec3::ZERO),
                 })
                 .id();
+
+            player_to_entity.0.insert(player.id, entity_id);
+        }
+    }
+}
+
+fn handle_lobby_tick(
+    player_to_entity: Res<PlayerToEntity>,
+    mut lobby_tick_rx: EventReader<LobbyTickPacket>,
+    mut players: Query<(&PlayerId, &mut Transform)>,
+) {
+    for lobby_tick in lobby_tick_rx.iter() {
+        for player in &lobby_tick.players {
+            if let Some(player_entity) = player_to_entity.0.get(&player.id) {
+                if let Ok((_, mut transform)) = players.get_mut(*player_entity) {
+                    transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
+                }
+            }
         }
     }
 }
@@ -235,6 +276,7 @@ fn update_network(
                                 connect_ack_packet.id
                             );
                             game.connected = true;
+
                             connect_ack_tx.send(connect_ack_packet);
                         },
                         ServerToClient::NewPlayer(new_player_packet) => {
@@ -278,6 +320,7 @@ fn render(
     fullscreen_quad: ResMut<FullscreenQuad>,
     mut text_system: ResMut<TextSystem>,
     mut debug_drawer: ResMut<DebugDrawer>,
+    players: Query<(&PlayerId, &Transform)>,
 ) {
     let mut frame_encoder = graphics_device.begin_frame();
 
@@ -301,7 +344,10 @@ fn render(
     fullscreen_quad.render(&mut frame_encoder);
 
     let mut shape_recorder = debug_drawer.begin();
-    shape_recorder.draw_circle(vec3(0.0, 0.0, 0.0), 2.0, 0.0);
+
+    for (_player_id, transform) in players.iter() {
+        shape_recorder.draw_circle(transform.translation, 2.0, 0.0);
+    }
     shape_recorder.end(&mut frame_encoder);
 
     text_system.render_horizontal(
