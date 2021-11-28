@@ -1,7 +1,9 @@
 use crate::network::PlayerInputPacket;
 
+pub mod components;
 pub mod math;
 pub mod network;
+pub use simple_game;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum GameState {

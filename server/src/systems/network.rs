@@ -1,15 +1,18 @@
 use crate::{
-    components::{AddrToPlayer, PlayerNetworkAddr, PlayerToEntity},
+    components::{AddrToPlayer, PlayerToEntity},
     systems::labels,
 };
 use crossbeam_channel::{Receiver, Sender};
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
-use simple_game::bevy::{
-    AppBuilder, Commands, EventReader, EventWriter, IntoSystem, ParallelSystemDescriptorCoercion,
-    Plugin, Query, Res, ResMut, SystemSet,
-};
 use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Duration};
-use sus_common::network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient};
+use sus_common::{
+    components::player::PlayerNetworkAddr,
+    network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
+    simple_game::bevy::{
+        AppBuilder, Commands, EventReader, EventWriter, IntoSystem,
+        ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
+    },
+};
 
 const BIND_ADDR: &str = "0.0.0.0:7600";
 

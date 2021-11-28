@@ -1,27 +1,13 @@
-use simple_game::bevy::{bevy_ecs, Bundle, Entity, Transform};
-use std::{
-    collections::{HashMap, VecDeque},
-    net::SocketAddr,
+use std::{collections::HashMap, net::SocketAddr};
+use sus_common::{
+    components::player::{
+        LastInputCounter, PlayerId, PlayerName, PlayerNetworkAddr, UnprocessedInputs,
+    },
+    simple_game::bevy::{bevy_ecs, Bundle, Entity, Transform},
 };
-use sus_common::network::PlayerInputPacket;
-
-#[derive(Debug)]
-pub struct PlayerId(pub u16);
-
-#[derive(Debug)]
-pub struct PlayerNetworkAddr(pub SocketAddr);
-
-#[derive(Debug)]
-pub struct PlayerName(pub String);
-
-#[derive(Debug)]
-pub struct LastInputCounter(pub u16);
-
-#[derive(Debug)]
-pub struct UnprocessedInputs(pub VecDeque<PlayerInputPacket>);
 
 #[derive(Debug, Bundle)]
-pub struct PlayerBundle {
+pub struct ServerPlayerBundle {
     pub id: PlayerId,
     pub name: PlayerName,
     pub network_addr: PlayerNetworkAddr,

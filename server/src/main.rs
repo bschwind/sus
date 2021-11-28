@@ -1,9 +1,11 @@
 use crate::systems::{LobbyPlugin, NetworkPlugin};
-use simple_game::bevy::{
-    App, AppBuilder, CorePlugin, HeadlessBevyGame, ScheduleRunnerPlugin, ScheduleRunnerSettings,
-};
 use std::time::Duration;
-use sus_common::GameState;
+use sus_common::{
+    simple_game::bevy::{
+        App, AppBuilder, CorePlugin, HeadlessBevyGame, ScheduleRunnerPlugin, ScheduleRunnerSettings,
+    },
+    GameState,
+};
 
 mod components;
 mod systems;
@@ -36,5 +38,5 @@ impl HeadlessBevyGame for SusServer {
 }
 
 fn main() {
-    simple_game::bevy::run_headless_bevy_game::<SusServer>();
+    sus_common::simple_game::bevy::run_headless_bevy_game::<SusServer>();
 }

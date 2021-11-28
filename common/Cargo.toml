@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+simple-game = { git = "https://github.com/bschwind/simple-game", branch = "master", features = ["bevy"] }

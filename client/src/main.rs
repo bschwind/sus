@@ -1,23 +1,24 @@
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
-use simple_game::{
-    bevy::{
-        App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, FixedTimestep, IntoSystem,
-        Res, ResMut, SystemSet,
-    },
-    graphics::{
-        text::{AxisAlign, Color, DefaultFont, StyledText, TextAlignment, TextSystem},
-        FullscreenQuad, GraphicsDevice,
-    },
-    wgpu,
-    winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
-    WindowDimensions,
-};
 use std::{
     net::SocketAddr,
     time::{Duration, Instant},
 };
 use sus_common::{
     network::{ClientToServer, ConnectPacket, ServerToClient},
+    simple_game::{
+        bevy::{
+            App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, FixedTimestep,
+            IntoSystem, Res, ResMut, SystemSet,
+        },
+        glam::vec3,
+        graphics::{
+            text::{AxisAlign, Color, DefaultFont, StyledText, TextAlignment, TextSystem},
+            DebugDrawer, FullscreenQuad, GraphicsDevice,
+        },
+        wgpu,
+        winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
+        WindowDimensions,
+    },
     PlayerInput,
 };
 
@@ -71,6 +72,7 @@ fn init(mut commands: Commands, graphics_device: Res<GraphicsDevice>) {
     let game = SusGame { server_addr: SERVER_ADDR.parse().unwrap(), connected: false };
 
     let text_system: TextSystem = TextSystem::new(&graphics_device);
+    let debug_drawer = DebugDrawer::new(&graphics_device);
     let fullscreen_quad = FullscreenQuad::new(&graphics_device);
     let player_input = PlayerInput::default();
 
@@ -78,6 +80,7 @@ fn init(mut commands: Commands, graphics_device: Res<GraphicsDevice>) {
 
     commands.insert_resource(game);
     commands.insert_resource(text_system);
+    commands.insert_resource(debug_drawer);
     commands.insert_resource(fullscreen_quad);
     commands.insert_resource(player_input);
     commands.insert_resource(InputCounter(0));
@@ -198,6 +201,7 @@ fn render(
     mut graphics_device: ResMut<GraphicsDevice>,
     fullscreen_quad: ResMut<FullscreenQuad>,
     mut text_system: ResMut<TextSystem>,
+    mut debug_drawer: ResMut<DebugDrawer>,
 ) {
     let mut frame_encoder = graphics_device.begin_frame();
 
@@ -219,6 +223,10 @@ fn render(
     }
 
     fullscreen_quad.render(&mut frame_encoder);
+
+    let mut shape_recorder = debug_drawer.begin();
+    shape_recorder.draw_circle(vec3(0.0, 0.0, 0.0), 2.0, 0.0);
+    shape_recorder.end(&mut frame_encoder);
 
     text_system.render_horizontal(
         TextAlignment {
@@ -265,5 +273,5 @@ fn render(
 }
 
 fn main() {
-    simple_game::bevy::run_bevy_game::<SusGame>();
+    sus_common::simple_game::bevy::run_bevy_game::<SusGame>();
 }

@@ -1,32 +1,32 @@
 use crate::{
-    components::{
-        AddrToPlayer, LastInputCounter, PlayerBundle, PlayerId, PlayerName, PlayerNetworkAddr,
-        PlayerToEntity, UnprocessedInputs,
-    },
+    components::{AddrToPlayer, PlayerToEntity, ServerPlayerBundle},
     systems::{
         fixed_timestep_with_state, labels,
         network::{DeliveryType, NewPlayer, OutgoingPacket, PlayerIdCounter},
         PacketDestination, PlayerInput,
     },
 };
-use simple_game::{
-    bevy::{
-        schedule::{ShouldRun, State},
-        AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem,
-        IntoSystem, ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
-        Transform,
-    },
-    glam::{vec3, Vec3},
-};
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
 };
 use sus_common::{
+    components::player::{
+        LastInputCounter, PlayerId, PlayerName, PlayerNetworkAddr, UnprocessedInputs,
+    },
     math::NormalizedInt,
     network::{
         FullGameStatePacket, LobbyPlayer, LobbyTickPacket, NewPlayerPacket, SequenceCmp,
         ServerToClient,
+    },
+    simple_game::{
+        bevy::{
+            schedule::{ShouldRun, State},
+            AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem,
+            IntoSystem, ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
+            Transform,
+        },
+        glam::{vec3, Vec3},
     },
     GameState,
 };
@@ -170,7 +170,7 @@ fn new_player_joined(
 
         let entity_id = commands
             .spawn()
-            .insert_bundle(PlayerBundle {
+            .insert_bundle(ServerPlayerBundle {
                 id: PlayerId(new_player_id),
                 name: PlayerName(new_player.connect_packet.name.clone()),
                 network_addr: PlayerNetworkAddr(new_player.addr),
