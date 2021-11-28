@@ -1,9 +1,11 @@
 use crate::{
-    components::{AddrToPlayer, PlayerToEntity, ServerPlayerBundle},
+    components::ServerPlayerBundle,
+    events::{NewPlayer, OutgoingPacket, PlayerInput},
+    resources::{AddrToPlayer, PlayerToEntity},
     systems::{
         fixed_timestep_with_state, labels,
-        network::{DeliveryType, NewPlayer, OutgoingPacket, PlayerIdCounter},
-        PacketDestination, PlayerInput,
+        network::{DeliveryType, PlayerIdCounter},
+        PacketDestination,
     },
 };
 use std::{

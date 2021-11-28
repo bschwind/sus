@@ -1,5 +1,6 @@
 use crate::{
-    components::{AddrToPlayer, PlayerToEntity},
+    events::{NewPlayer, OutgoingPacket, PlayerInput},
+    resources::{AddrToPlayer, PlayerToEntity},
     systems::labels,
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -7,7 +8,7 @@ use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Duration};
 use sus_common::{
     components::player::PlayerNetworkAddr,
-    network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
+    network::ClientToServer,
     simple_game::bevy::{
         AppBuilder, Commands, EventReader, EventWriter, IntoSystem,
         ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
@@ -22,17 +23,6 @@ struct NetworkThread(JoinHandle<()>);
 struct NetTx(Sender<laminar::Packet>);
 struct NetRx(Receiver<SocketEvent>);
 pub struct PlayerIdCounter(pub u16);
-
-pub struct NewPlayer {
-    pub addr: SocketAddr,
-    pub connect_packet: ConnectPacket,
-}
-
-#[derive(Debug)]
-pub struct PlayerInput {
-    pub id: u16,
-    pub input: PlayerInputPacket,
-}
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut AppBuilder) {
@@ -137,22 +127,6 @@ pub enum PacketDestination {
     BroadcastToAll,
     BroadcastToAllExcept(SocketAddr),
     BroadcastToSet(Vec<SocketAddr>),
-}
-
-pub struct OutgoingPacket {
-    destination: PacketDestination,
-    packet: ServerToClient,
-    delivery_type: DeliveryType,
-}
-
-impl OutgoingPacket {
-    pub fn new(
-        destination: PacketDestination,
-        packet: ServerToClient,
-        delivery_type: DeliveryType,
-    ) -> Self {
-        Self { destination, packet, delivery_type }
-    }
 }
 
 #[allow(unused)]

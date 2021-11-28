@@ -8,6 +8,8 @@ use sus_common::{
 };
 
 mod components;
+mod events;
+mod resources;
 mod systems;
 
 pub const TICK_RATE_HZ: usize = 10;

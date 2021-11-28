@@ -1,14 +1,18 @@
+use crate::resources::InputCounter;
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use std::{
     net::SocketAddr,
     time::{Duration, Instant},
 };
 use sus_common::{
-    network::{ClientToServer, ConnectPacket, ServerToClient},
+    network::{
+        ClientToServer, ConnectPacket, FullGameStatePacket, LobbyTickPacket, NewPlayerPacket,
+        ServerToClient,
+    },
     simple_game::{
         bevy::{
-            App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, FixedTimestep,
-            IntoSystem, Res, ResMut, SystemSet,
+            App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, EventWriter,
+            FixedTimestep, IntoSystem, Res, ResMut, SystemSet,
         },
         glam::vec3,
         graphics::{
@@ -22,10 +26,11 @@ use sus_common::{
     PlayerInput,
 };
 
-const SERVER_ADDR: &str = "127.0.0.1:7600";
+mod components;
+mod events;
+mod resources;
 
-#[derive(Debug)]
-struct InputCounter(u16);
+const SERVER_ADDR: &str = "127.0.0.1:7600";
 
 struct SusGame {
     server_addr: SocketAddr,
@@ -149,7 +154,13 @@ fn send_input_to_server(
         .expect("Could not send packet to server");
 }
 
-fn update_network(mut game: ResMut<SusGame>, mut socket: ResMut<Socket>) {
+fn update_network(
+    mut game: ResMut<SusGame>,
+    mut socket: ResMut<Socket>,
+    mut new_player_tx: EventWriter<NewPlayerPacket>,
+    mut full_game_state_tx: EventWriter<FullGameStatePacket>,
+    mut lobby_tick_tx: EventWriter<LobbyTickPacket>,
+) {
     let now = Instant::now();
     socket.manual_poll(now);
 
@@ -166,12 +177,15 @@ fn update_network(mut game: ResMut<SusGame>, mut socket: ResMut<Socket>) {
                         },
                         ServerToClient::NewPlayer(new_player_packet) => {
                             println!("New player: {:?}", new_player_packet);
+                            new_player_tx.send(new_player_packet);
                         },
                         ServerToClient::FullGameState(full_game_state) => {
                             println!("Full game state: {:?}", full_game_state);
+                            full_game_state_tx.send(full_game_state);
                         },
                         ServerToClient::LobbyTick(lobby_tick_packet) => {
                             println!("Lobby tick - {:?}", lobby_tick_packet);
+                            lobby_tick_tx.send(lobby_tick_packet);
                         },
                     }
                 }
