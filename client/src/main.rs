@@ -1,20 +1,24 @@
-use crate::resources::InputCounter;
+use crate::{
+    components::{ClientPlayerBundle, MyPlayer},
+    resources::InputCounter,
+};
 use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
 use std::{
     net::SocketAddr,
     time::{Duration, Instant},
 };
 use sus_common::{
+    components::player::{PlayerId, PlayerName},
     network::{
-        ClientToServer, ConnectPacket, FullGameStatePacket, LobbyTickPacket, NewPlayerPacket,
-        ServerToClient,
+        ClientToServer, ConnectAckPacket, ConnectPacket, FullGameStatePacket, LobbyTickPacket,
+        NewPlayerPacket, ServerToClient,
     },
     simple_game::{
         bevy::{
             App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, EventWriter,
-            FixedTimestep, IntoSystem, Res, ResMut, SystemSet,
+            FixedTimestep, IntoSystem, Res, ResMut, SystemSet, Transform,
         },
-        glam::vec3,
+        glam::{vec3, Vec3},
         graphics::{
             text::{AxisAlign, Color, DefaultFont, StyledText, TextAlignment, TextSystem},
             DebugDrawer, FullscreenQuad, GraphicsDevice,
@@ -55,6 +59,10 @@ impl BevyGame for SusGame {
 
         ecs_world_builder
             .add_plugin(CorePlugin)
+            .add_event::<ConnectAckPacket>()
+            .add_event::<NewPlayerPacket>()
+            .add_event::<FullGameStatePacket>()
+            .add_event::<LobbyTickPacket>()
             .add_startup_system(init.system())
             .add_system(handle_input.system())
             .add_system_set(
@@ -65,6 +73,9 @@ impl BevyGame for SusGame {
                     )
                     .with_system(send_input_to_server.system())
                     .with_system(update_network.system())
+                    .with_system(handle_connect_ack.system())
+                    .with_system(handle_full_game_state.system())
+                    .with_system(new_player_joined.system())
                     .with_system(update_game.system()),
             )
             .add_system(render.system());
@@ -154,9 +165,56 @@ fn send_input_to_server(
         .expect("Could not send packet to server");
 }
 
+fn handle_connect_ack(mut commands: Commands, mut connect_ack_rx: EventReader<ConnectAckPacket>) {
+    for connect_ack in connect_ack_rx.iter() {
+        let _entity_id = commands
+            .spawn()
+            .insert_bundle(ClientPlayerBundle {
+                id: PlayerId(connect_ack.id),
+                name: PlayerName("Brian".to_string()), // TODO
+                transform: Transform::from_translation(Vec3::ZERO),
+            })
+            .insert(MyPlayer)
+            .id();
+    }
+}
+
+fn new_player_joined(mut commands: Commands, mut new_player_rx: EventReader<NewPlayerPacket>) {
+    for new_player in new_player_rx.iter() {
+        let _entity_id = commands
+            .spawn()
+            .insert_bundle(ClientPlayerBundle {
+                id: PlayerId(new_player.id),
+                name: PlayerName(new_player.name.clone()),
+                transform: Transform::from_translation(Vec3::ZERO),
+            })
+            .insert(MyPlayer)
+            .id();
+    }
+}
+
+fn handle_full_game_state(
+    mut commands: Commands,
+    mut full_game_state_rx: EventReader<FullGameStatePacket>,
+) {
+    for full_game_state in full_game_state_rx.iter() {
+        for player in &full_game_state.players {
+            let _entity_id = commands
+                .spawn()
+                .insert_bundle(ClientPlayerBundle {
+                    id: PlayerId(player.id),
+                    name: PlayerName(player.name.clone()),
+                    transform: Transform::from_translation(Vec3::ZERO),
+                })
+                .id();
+        }
+    }
+}
+
 fn update_network(
     mut game: ResMut<SusGame>,
     mut socket: ResMut<Socket>,
+    mut connect_ack_tx: EventWriter<ConnectAckPacket>,
     mut new_player_tx: EventWriter<NewPlayerPacket>,
     mut full_game_state_tx: EventWriter<FullGameStatePacket>,
     mut lobby_tick_tx: EventWriter<LobbyTickPacket>,
@@ -171,9 +229,13 @@ fn update_network(
             if packet.addr() == game.server_addr {
                 if let Ok(decoded) = bincode::deserialize::<ServerToClient>(msg) {
                     match decoded {
-                        ServerToClient::ConnectAck => {
-                            println!("Server accepted us, yay!");
+                        ServerToClient::ConnectAck(connect_ack_packet) => {
+                            println!(
+                                "Server accepted us, yay! Our id is {}",
+                                connect_ack_packet.id
+                            );
                             game.connected = true;
+                            connect_ack_tx.send(connect_ack_packet);
                         },
                         ServerToClient::NewPlayer(new_player_packet) => {
                             println!("New player: {:?}", new_player_packet);

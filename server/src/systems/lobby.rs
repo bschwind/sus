@@ -18,8 +18,8 @@ use sus_common::{
     },
     math::NormalizedInt,
     network::{
-        FullGameStatePacket, LobbyPlayer, LobbyTickPacket, NewPlayerPacket, SequenceCmp,
-        ServerToClient,
+        ConnectAckPacket, FullGameStatePacket, LobbyPlayer, LobbyTickPacket, NewPlayerPacket,
+        SequenceCmp, ServerToClient,
     },
     simple_game::{
         bevy::{
@@ -186,7 +186,8 @@ fn new_player_joined(
         players.0.insert(new_player.addr, new_player_id);
         player_to_entity.0.insert(new_player_id, entity_id);
 
-        let reply = ServerToClient::ConnectAck;
+        let reply = ServerToClient::ConnectAck(ConnectAckPacket { id: new_player_id });
+
         outgoing_packets.send(OutgoingPacket::new(
             PacketDestination::Single(new_player.addr),
             reply,

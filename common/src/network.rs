@@ -7,7 +7,7 @@ pub const VOICE_STREAM: u8 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerToClient {
-    ConnectAck,
+    ConnectAck(ConnectAckPacket),
     NewPlayer(NewPlayerPacket),
     FullGameState(FullGameStatePacket),
     LobbyTick(LobbyTickPacket),
@@ -17,6 +17,11 @@ pub enum ServerToClient {
 pub enum ClientToServer {
     Connect(ConnectPacket),
     PlayerInput(PlayerInputPacket),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectAckPacket {
+    pub id: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

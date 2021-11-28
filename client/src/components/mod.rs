@@ -3,6 +3,9 @@ use sus_common::{
     simple_game::bevy::{bevy_ecs, Bundle, Transform},
 };
 
+// Marker component to designate which player is "us".
+pub struct MyPlayer;
+
 #[derive(Debug, Bundle)]
 pub struct ClientPlayerBundle {
     pub id: PlayerId,
