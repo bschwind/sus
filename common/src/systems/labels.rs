@@ -7,6 +7,9 @@ pub struct Network;
 pub struct Lobby;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, SystemLabel)]
+pub struct Render;
+
+#[derive(Clone, Hash, Debug, PartialEq, Eq, SystemLabel)]
 pub enum NetworkSystem {
     Receive,
     PlayerInput,
