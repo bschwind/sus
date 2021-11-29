@@ -1,4 +1,4 @@
-use crate::systems::{LobbyPlugin, NetworkPlugin};
+use crate::systems::{LobbyPlugin, ServerNetworkPlugin};
 use std::time::Duration;
 use sus_common::{
     simple_game::bevy::{
@@ -31,7 +31,7 @@ impl HeadlessBevyGame for SusServer {
                 1.0 / TICK_RATE_HZ as f64,
             )))
             .add_plugin(ScheduleRunnerPlugin::default())
-            .add_plugin(NetworkPlugin)
+            .add_plugin(ServerNetworkPlugin)
             .add_plugin(LobbyPlugin::new(Self::desired_fps()))
             .add_state(GameState::Lobby);
 

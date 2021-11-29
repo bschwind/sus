@@ -6,5 +6,4 @@ edition = "2018"
 
 [dependencies]
 bincode = "1"
-laminar = "0.4"
 sus-common = { path = "../common" }

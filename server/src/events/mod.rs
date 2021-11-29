@@ -1,6 +1,6 @@
-use crate::systems::network::{DeliveryType, PacketDestination};
+use crate::systems::network::PacketDestination;
 use std::net::SocketAddr;
-use sus_common::network::{ConnectPacket, PlayerInputPacket, ServerToClient};
+use sus_common::network::{ConnectPacket, DeliveryType, PlayerInputPacket, ServerToClient};
 
 pub struct NewPlayer {
     pub addr: SocketAddr,
@@ -17,6 +17,7 @@ pub struct OutgoingPacket {
     pub destination: PacketDestination,
     pub packet: ServerToClient,
     pub delivery_type: DeliveryType,
+    pub stream_id: Option<u8>,
 }
 
 impl OutgoingPacket {
@@ -24,7 +25,8 @@ impl OutgoingPacket {
         destination: PacketDestination,
         packet: ServerToClient,
         delivery_type: DeliveryType,
+        stream_id: Option<u8>,
     ) -> Self {
-        Self { destination, packet, delivery_type }
+        Self { destination, packet, delivery_type, stream_id }
     }
 }

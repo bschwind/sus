@@ -1,31 +1,29 @@
 use crate::{
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
-    systems::labels,
 };
-use crossbeam_channel::{Receiver, Sender};
-use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
-use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use sus_common::{
     components::player::PlayerNetworkAddr,
-    network::ClientToServer,
-    resources::PlayerToEntity,
+    laminar::{Config as NetworkConfig, Socket, SocketEvent},
+    network::{make_packet, ClientToServer},
+    resources::{
+        network::{NetRx, NetTx, NetworkThread},
+        PlayerToEntity,
+    },
     simple_game::bevy::{
         AppBuilder, Commands, EventReader, EventWriter, IntoSystem,
         ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
     },
+    systems::labels,
 };
 
 const BIND_ADDR: &str = "0.0.0.0:7600";
 
-pub struct NetworkPlugin;
-
-struct NetworkThread(JoinHandle<()>);
-struct NetTx(Sender<laminar::Packet>);
-struct NetRx(Receiver<SocketEvent>);
+pub struct ServerNetworkPlugin;
 pub struct PlayerIdCounter(pub u16);
 
-impl Plugin for NetworkPlugin {
+impl Plugin for ServerNetworkPlugin {
     fn build(&self, app: &mut AppBuilder) {
         app.add_startup_system(setup.system())
             .add_event::<PlayerInput>()
@@ -130,16 +128,6 @@ pub enum PacketDestination {
     BroadcastToSet(Vec<SocketAddr>),
 }
 
-#[allow(unused)]
-#[derive(Debug, Copy, Clone)]
-pub enum DeliveryType {
-    ReliableOrdered,
-    ReliableSequenced,
-    ReliableUnordered,
-    Unreliable,
-    UnreliableSequenced,
-}
-
 fn network_send(
     net_tx: Res<NetTx>,
     mut outgoing_packets: EventReader<OutgoingPacket>,
@@ -152,7 +140,7 @@ fn network_send(
 
         match &outgoing.destination {
             PacketDestination::Single(addr) => {
-                let packet = make_packet(outgoing.delivery_type, data, *addr);
+                let packet = make_packet(outgoing.delivery_type, data, *addr, outgoing.stream_id);
 
                 if let Err(e) = net_tx.send(packet) {
                     println!("Failed to send packet: {:?}", e);
@@ -162,7 +150,12 @@ fn network_send(
                 player_addrs.iter().for_each(|PlayerNetworkAddr(addr)| {
                     // TODO(bschwind) - Ideally we wouldn't clone this Vec here, but laminar
                     // packets take a Vec<u8> instead of a slice.
-                    let packet = make_packet(outgoing.delivery_type, data.clone(), *addr);
+                    let packet = make_packet(
+                        outgoing.delivery_type,
+                        data.clone(),
+                        *addr,
+                        outgoing.stream_id,
+                    );
 
                     if let Err(e) = net_tx.send(packet) {
                         println!("Failed to send packet: {:?}", e);
@@ -174,7 +167,12 @@ fn network_send(
                     .iter()
                     .filter(|PlayerNetworkAddr(addr)| *addr != *exclude_addr)
                     .for_each(|PlayerNetworkAddr(addr)| {
-                        let packet = make_packet(outgoing.delivery_type, data.clone(), *addr);
+                        let packet = make_packet(
+                            outgoing.delivery_type,
+                            data.clone(),
+                            *addr,
+                            outgoing.stream_id,
+                        );
 
                         if let Err(e) = net_tx.send(packet) {
                             println!("Failed to send packet: {:?}", e);
@@ -183,7 +181,12 @@ fn network_send(
             },
             PacketDestination::BroadcastToSet(addrs) => {
                 addrs.iter().for_each(|addr| {
-                    let packet = make_packet(outgoing.delivery_type, data.clone(), *addr);
+                    let packet = make_packet(
+                        outgoing.delivery_type,
+                        data.clone(),
+                        *addr,
+                        outgoing.stream_id,
+                    );
 
                     if let Err(e) = net_tx.send(packet) {
                         println!("Failed to send packet: {:?}", e);
@@ -191,15 +194,5 @@ fn network_send(
                 });
             },
         }
-    }
-}
-
-fn make_packet(delivery_type: DeliveryType, data: Vec<u8>, addr: SocketAddr) -> laminar::Packet {
-    match delivery_type {
-        DeliveryType::ReliableOrdered => Packet::reliable_ordered(addr, data, None),
-        DeliveryType::ReliableSequenced => Packet::reliable_sequenced(addr, data, None),
-        DeliveryType::ReliableUnordered => Packet::reliable_unordered(addr, data),
-        DeliveryType::Unreliable => Packet::unreliable(addr, data),
-        DeliveryType::UnreliableSequenced => Packet::unreliable_sequenced(addr, data, None),
     }
 }

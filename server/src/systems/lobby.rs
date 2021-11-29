@@ -2,11 +2,7 @@ use crate::{
     components::ServerPlayerBundle,
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
-    systems::{
-        fixed_timestep_with_state, labels,
-        network::{DeliveryType, PlayerIdCounter},
-        PacketDestination,
-    },
+    systems::{fixed_timestep_with_state, network::PlayerIdCounter, PacketDestination},
 };
 use std::{
     collections::VecDeque,
@@ -18,8 +14,8 @@ use sus_common::{
     },
     math::NormalizedInt,
     network::{
-        ConnectAckPacket, FullGameStatePacket, LobbyPlayer, LobbyTickPacket, NewPlayerPacket,
-        SequenceCmp, ServerToClient,
+        ConnectAckPacket, DeliveryType, FullGameStatePacket, LobbyPlayer, LobbyTickPacket,
+        NewPlayerPacket, SequenceCmp, ServerToClient, GAME_STATE_STREAM,
     },
     resources::PlayerToEntity,
     simple_game::{
@@ -31,6 +27,7 @@ use sus_common::{
         },
         glam::{vec3, Vec3},
     },
+    systems::labels,
     GameState,
 };
 
@@ -134,6 +131,7 @@ fn send_new_state(
             PacketDestination::Single(network_addr.0),
             packet,
             DeliveryType::UnreliableSequenced,
+            Some(GAME_STATE_STREAM),
         ));
     }
 }
@@ -193,6 +191,7 @@ fn new_player_joined(
             PacketDestination::Single(new_player.addr),
             reply,
             DeliveryType::ReliableOrdered,
+            Some(GAME_STATE_STREAM),
         ));
 
         // Send all existing state to new client
@@ -208,6 +207,7 @@ fn new_player_joined(
             PacketDestination::Single(new_player.addr),
             full_state_packet,
             DeliveryType::ReliableOrdered,
+            Some(GAME_STATE_STREAM),
         ));
 
         // Tell all other players this one has connected
@@ -220,6 +220,7 @@ fn new_player_joined(
             PacketDestination::BroadcastToAllExcept(new_player.addr),
             new_player_packet,
             DeliveryType::ReliableOrdered,
+            Some(GAME_STATE_STREAM),
         ));
     }
 }

@@ -1,9 +1,22 @@
+use laminar::Packet;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 pub const GAME_VERSION: u32 = 0;
 pub const INPUT_STREAM: u8 = 0;
-pub const CHAT_STREAM: u8 = 1;
-pub const VOICE_STREAM: u8 = 2;
+pub const GAME_STATE_STREAM: u8 = 1;
+pub const CHAT_STREAM: u8 = 2;
+pub const VOICE_STREAM: u8 = 3;
+
+#[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+pub enum DeliveryType {
+    ReliableOrdered,
+    ReliableSequenced,
+    ReliableUnordered,
+    Unreliable,
+    UnreliableSequenced,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerToClient {
@@ -84,6 +97,21 @@ pub struct PlayerInputPacket {
 impl PlayerInputPacket {
     pub fn new(counter: u16, x: i16, y: i16) -> Self {
         Self { counter, x, y }
+    }
+}
+
+pub fn make_packet(
+    delivery_type: DeliveryType,
+    data: Vec<u8>,
+    addr: SocketAddr,
+    stream: Option<u8>,
+) -> laminar::Packet {
+    match delivery_type {
+        DeliveryType::ReliableOrdered => Packet::reliable_ordered(addr, data, stream),
+        DeliveryType::ReliableSequenced => Packet::reliable_sequenced(addr, data, stream),
+        DeliveryType::ReliableUnordered => Packet::reliable_unordered(addr, data),
+        DeliveryType::Unreliable => Packet::unreliable(addr, data),
+        DeliveryType::UnreliableSequenced => Packet::unreliable_sequenced(addr, data, stream),
     }
 }
 
