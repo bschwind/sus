@@ -74,7 +74,7 @@ fn initialize_network(game: &SusGame, name: &str) -> Socket {
     };
 
     let mut socket =
-        Socket::bind_with_config("127.0.0.1:0", net_config).expect("Could not connect to server");
+        Socket::bind_with_config("0.0.0.0:0", net_config).expect("Could not connect to server");
 
     let connect_packet = ClientToServer::Connect(ConnectPacket::new(name));
     socket

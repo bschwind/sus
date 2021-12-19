@@ -174,7 +174,6 @@ fn new_player_joined(
                 name: PlayerName(new_player.name.clone()),
                 transform: Transform::from_translation(Vec3::ZERO),
             })
-            .insert(MyPlayer)
             .id();
 
         player_to_entity.0.insert(new_player.id, entity_id);
