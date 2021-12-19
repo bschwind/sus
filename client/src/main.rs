@@ -4,9 +4,13 @@ use crate::{
     resources::{InputCounter, MyName},
     systems::{ClientNetworkPlugin, RenderPlugin},
 };
-use std::{collections::HashMap, net::SocketAddr};
+use std::{
+    collections::{HashMap, VecDeque},
+    net::SocketAddr,
+};
 use sus_common::{
-    components::player::{PlayerId, PlayerName},
+    components::player::{MyPlayerId, PlayerId, PlayerName, UnprocessedInputs},
+    math::NormalizedInt,
     network::{
         ClientToServer, ConnectAckPacket, DeliveryType, FullGameStatePacket, LobbyTickPacket,
         NewPlayerPacket,
@@ -15,7 +19,7 @@ use sus_common::{
     simple_game::{
         bevy::{
             App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, EventWriter,
-            FixedTimestep, IntoSystem, Query, Res, ResMut, SystemSet, Transform,
+            FixedTimestep, IntoSystem, Query, Res, ResMut, SystemSet, Transform, With,
         },
         glam::{vec3, Vec3},
         winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
@@ -31,6 +35,7 @@ mod resources;
 mod systems;
 
 const SERVER_ADDR: &str = "127.0.0.1:7600";
+const GAME_TIMESTEP_LABEL: &str = "game_timestep";
 
 struct SusGame {
     server_addr: SocketAddr,
@@ -61,7 +66,7 @@ impl BevyGame for SusGame {
             .insert_resource(game)
             .insert_resource(MyName(my_name))
             .add_startup_system(init.system())
-            .add_plugin(ClientNetworkPlugin)
+            .add_plugin(ClientNetworkPlugin::new(Self::desired_fps()))
             .add_plugin(RenderPlugin)
             .add_system(handle_input.system())
             .add_system_set(
@@ -69,7 +74,7 @@ impl BevyGame for SusGame {
                     .after(labels::NetworkSystem::Receive)
                     .with_run_criteria(
                         FixedTimestep::step(1.0 / Self::desired_fps() as f64)
-                            .with_label("game_timestep"),
+                            .with_label(GAME_TIMESTEP_LABEL),
                     )
                     .with_system(send_input_to_server.system())
                     .with_system(handle_connect_ack.system())
@@ -84,8 +89,11 @@ impl BevyGame for SusGame {
 }
 
 fn init(mut commands: Commands) {
+    commands.insert_resource(PlayerInput::default());
     commands.insert_resource(InputCounter(0));
+    commands.insert_resource(MyPlayerId(None));
     commands.insert_resource(PlayerToEntity(HashMap::new()));
+    commands.insert_resource(UnprocessedInputs(VecDeque::new()));
 }
 
 fn handle_input(
@@ -110,10 +118,12 @@ fn handle_input(
 fn send_input_to_server(
     player_input: Res<PlayerInput>,
     mut input_counter: ResMut<InputCounter>,
+    mut unprocessed_inputs: ResMut<UnprocessedInputs>,
     mut outgoing_packets: EventWriter<OutgoingPacket>,
 ) {
-    // TODO(bschwind) - Store unacked inputs in a list
     let input_packet = player_input.to_player_input_packet(input_counter.0);
+    unprocessed_inputs.0.push_back(input_packet);
+
     input_counter.0 = input_counter.0.wrapping_add(1);
 
     let msg = ClientToServer::PlayerInput(input_packet);
@@ -130,6 +140,7 @@ fn handle_connect_ack(
     mut connect_ack_rx: EventReader<ConnectAckPacket>,
     my_name: Res<MyName>,
     mut player_to_entity: ResMut<PlayerToEntity>,
+    mut my_player_id: ResMut<MyPlayerId>,
 ) {
     for connect_ack in connect_ack_rx.iter() {
         println!("Got a connect ack");
@@ -143,6 +154,8 @@ fn handle_connect_ack(
             })
             .insert(MyPlayer)
             .id();
+
+        my_player_id.0 = Some(connect_ack.id);
 
         player_to_entity.0.insert(connect_ack.id, entity_id);
     }
@@ -192,9 +205,13 @@ fn handle_full_game_state(
 fn handle_lobby_tick(
     player_to_entity: Res<PlayerToEntity>,
     mut lobby_tick_rx: EventReader<LobbyTickPacket>,
+    mut unprocessed_inputs: ResMut<UnprocessedInputs>,
+    my_player_id: Res<MyPlayerId>,
     mut players: Query<(&PlayerId, &mut Transform)>,
 ) {
     for lobby_tick in lobby_tick_rx.iter() {
+        unprocessed_inputs.clear_acknowledged_inputs(lobby_tick.last_input_counter);
+
         for player in &lobby_tick.players {
             if let Some(player_entity) = player_to_entity.0.get(&player.id) {
                 if let Ok((_, mut transform)) = players.get_mut(*player_entity) {
@@ -202,10 +219,29 @@ fn handle_lobby_tick(
                 }
             }
         }
+
+        // Apply all unacknowledged inputs
+        if let Some(my_player_id) = my_player_id.0 {
+            if let Some(my_player_entity) = player_to_entity.0.get(&my_player_id) {
+                if let Ok((_, mut transform)) = players.get_mut(*my_player_entity) {
+                    for input in &unprocessed_inputs.0 {
+                        let velocity = vec3(input.x.normalized(), input.y.normalized(), 0.0);
+                        transform.translation += velocity * 0.1;
+                    }
+                }
+            }
+        }
     }
 }
 
-fn update_game(_player_input: Res<PlayerInput>) {
+fn update_game(
+    player_input: Res<PlayerInput>,
+    mut players: Query<(&PlayerId, &mut Transform), With<MyPlayer>>,
+) {
+    if let Ok((_my_player_id, mut transform)) = players.single_mut() {
+        let velocity = vec3(player_input.x().normalized(), player_input.y().normalized(), 0.0);
+        transform.translation += velocity * 0.1;
+    }
     // println!("player_input: {:?}", *player_input);
 }
 

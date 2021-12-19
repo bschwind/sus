@@ -103,7 +103,7 @@ fn update_lobby(
                 println!("Moving player ID {} with input {:?}", player_id.0, input);
 
                 let velocity = vec3(input.x.normalized(), input.y.normalized(), 0.0);
-                transform.translation += velocity;
+                transform.translation += velocity * 0.1;
             }
         }
     }

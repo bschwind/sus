@@ -62,21 +62,27 @@ impl Default for PlayerInput {
 }
 
 impl PlayerInput {
-    pub fn to_player_input_packet(&self, counter: u16) -> PlayerInputPacket {
-        PlayerInputPacket {
-            counter,
-            x: match (self.left, self.right) {
-                (true, true) => 0,
-                (true, false) => i16::MIN,
-                (false, true) => i16::MAX,
-                (false, false) => 0,
-            },
-            y: match (self.up, self.down) {
-                (true, true) => 0,
-                (true, false) => i16::MAX,
-                (false, true) => i16::MIN,
-                (false, false) => 0,
-            },
+    pub fn x(&self) -> i16 {
+        match (self.left, self.right) {
+            (true, true) => 0,
+            (true, false) => i16::MIN,
+            (false, true) => i16::MAX,
+            (false, false) => 0,
         }
+    }
+
+    pub fn y(&self) -> i16 {
+        match (self.up, self.down) {
+            (true, true) => 0,
+            (true, false) => i16::MAX,
+            (false, true) => i16::MIN,
+            (false, false) => 0,
+        }
+    }
+}
+
+impl PlayerInput {
+    pub fn to_player_input_packet(&self, counter: u16) -> PlayerInputPacket {
+        PlayerInputPacket { counter, x: self.x(), y: self.y() }
     }
 }
