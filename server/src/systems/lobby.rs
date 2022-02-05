@@ -20,8 +20,9 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
+            bevy_ecs,
             schedule::{ShouldRun, State},
-            AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem,
+            App, Commands, Component, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem,
             IntoSystem, ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
             Transform,
         },
@@ -43,7 +44,7 @@ impl LobbyPlugin {
 }
 
 impl Plugin for LobbyPlugin {
-    fn build(&self, app: &mut AppBuilder) {
+    fn build(&self, app: &mut App) {
         app.add_startup_system(setup.system())
             .add_system_set(SystemSet::on_enter(GameState::Lobby).with_system(setup_lobby.system()))
             .add_system_set(
@@ -68,6 +69,7 @@ impl Plugin for LobbyPlugin {
     }
 }
 
+#[derive(Component)]
 struct LobbyTimer(Instant);
 const LOBBY_COUNTDOWN_TIME: Duration = Duration::from_secs(50);
 
@@ -85,7 +87,7 @@ fn update_lobby(
     mut players: Query<(&PlayerId, &mut Transform, &mut UnprocessedInputs, &mut LastInputCounter)>,
 ) {
     println!("Lobby tick");
-    let lobby_timer = lobby_timer.single().unwrap().0;
+    let lobby_timer = lobby_timer.single().0;
 
     if lobby_timer.elapsed() > LOBBY_COUNTDOWN_TIME {
         println!("Leaving lobby!");

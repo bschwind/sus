@@ -8,7 +8,7 @@ use sus_common::{
     },
     resources::network::{NetRx, NetTx, NetworkThread},
     simple_game::bevy::{
-        AppBuilder, Commands, EventReader, EventWriter, FixedTimestep, IntoSystem,
+        App, Commands, EventReader, EventWriter, FixedTimestep, IntoSystem,
         ParallelSystemDescriptorCoercion, Plugin, Res, ResMut, SystemSet,
     },
     systems::labels,
@@ -25,7 +25,7 @@ impl ClientNetworkPlugin {
 }
 
 impl Plugin for ClientNetworkPlugin {
-    fn build(&self, app: &mut AppBuilder) {
+    fn build(&self, app: &mut App) {
         app.add_startup_system(setup.system())
             .add_event::<ConnectAckPacket>()
             .add_event::<NewPlayerPacket>()

@@ -12,8 +12,8 @@ use sus_common::{
         PlayerToEntity,
     },
     simple_game::bevy::{
-        AppBuilder, Commands, EventReader, EventWriter, IntoSystem,
-        ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
+        App, Commands, EventReader, EventWriter, IntoSystem, ParallelSystemDescriptorCoercion,
+        Plugin, Query, Res, ResMut, SystemSet,
     },
     systems::labels,
 };
@@ -24,7 +24,7 @@ pub struct ServerNetworkPlugin;
 pub struct PlayerIdCounter(pub u16);
 
 impl Plugin for ServerNetworkPlugin {
-    fn build(&self, app: &mut AppBuilder) {
+    fn build(&self, app: &mut App) {
         app.add_startup_system(setup.system())
             .add_event::<PlayerInput>()
             .add_event::<NewPlayer>()

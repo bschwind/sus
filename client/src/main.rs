@@ -18,8 +18,8 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
-            App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, EventWriter,
-            FixedTimestep, IntoSystem, Query, Res, ResMut, SystemSet, Transform, With,
+            App, BevyGame, Commands, CorePlugin, EventReader, EventWriter, FixedTimestep,
+            IntoSystem, Query, Res, ResMut, SystemSet, Transform, With,
         },
         glam::{vec3, Vec3},
         winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
@@ -55,8 +55,8 @@ impl BevyGame for SusGame {
         60
     }
 
-    fn init_systems() -> AppBuilder {
-        let mut ecs_world_builder = App::build();
+    fn init_systems() -> App {
+        let mut ecs_world_builder = App::new();
 
         let game = SusGame { server_addr: SERVER_ADDR.parse().unwrap(), connected: false };
         let my_name = "Brian".to_string();
@@ -237,7 +237,7 @@ fn update_game(
     player_input: Res<PlayerInput>,
     mut players: Query<(&PlayerId, &mut Transform), With<MyPlayer>>,
 ) {
-    if let Ok((_my_player_id, mut transform)) = players.single_mut() {
+    if let Ok((_my_player_id, mut transform)) = players.get_single_mut() {
         let velocity = vec3(player_input.x().normalized(), player_input.y().normalized(), 0.0);
         transform.translation += velocity * 0.1;
     }

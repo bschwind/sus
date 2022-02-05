@@ -2,7 +2,7 @@ use crate::systems::{LobbyPlugin, ServerNetworkPlugin};
 use std::time::Duration;
 use sus_common::{
     simple_game::bevy::{
-        App, AppBuilder, CorePlugin, HeadlessBevyGame, ScheduleRunnerPlugin, ScheduleRunnerSettings,
+        App, CorePlugin, HeadlessBevyGame, ScheduleRunnerPlugin, ScheduleRunnerSettings,
     },
     GameState,
 };
@@ -22,8 +22,8 @@ impl HeadlessBevyGame for SusServer {
         60
     }
 
-    fn init_systems() -> AppBuilder {
-        let mut ecs_world_builder = App::build();
+    fn init_systems() -> App {
+        let mut ecs_world_builder = App::new();
 
         ecs_world_builder
             .add_plugin(CorePlugin)

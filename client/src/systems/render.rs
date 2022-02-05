@@ -3,7 +3,7 @@ use sus_common::{
     components::player::PlayerId,
     simple_game::{
         bevy::{
-            AppBuilder, Commands, IntoSystem, ParallelSystemDescriptorCoercion, Plugin, Query, Res,
+            App, Commands, IntoSystem, ParallelSystemDescriptorCoercion, Plugin, Query, Res,
             ResMut, Transform,
         },
         graphics::{
@@ -19,7 +19,7 @@ use sus_common::{
 pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
-    fn build(&self, app: &mut AppBuilder) {
+    fn build(&self, app: &mut App) {
         app.add_startup_system(setup.system()).add_system(render.system().label(labels::Render));
     }
 }
