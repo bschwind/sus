@@ -1,6 +1,7 @@
 use crate::{
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
+    TICK_RATE_HZ,
 };
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use sus_common::{
@@ -12,8 +13,8 @@ use sus_common::{
         PlayerToEntity,
     },
     simple_game::bevy::{
-        App, Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion, Plugin, Query,
-        Res, ResMut, SystemSet,
+        App, Commands, EventWriter, Events, ParallelSystemDescriptorCoercion, Plugin, Query, Res,
+        ResMut, SystemSet,
     },
     systems::labels,
 };
@@ -27,8 +28,8 @@ impl Plugin for ServerNetworkPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup)
             .add_event::<PlayerInput>()
-            .add_event::<NewPlayer>()
-            .add_event::<OutgoingPacket>()
+            .init_resource::<Events<NewPlayer>>()
+            .init_resource::<Events<OutgoingPacket>>()
             .add_system_set(
                 SystemSet::new()
                     .label(labels::Network)
@@ -44,7 +45,11 @@ fn setup(mut commands: Commands) {
     let mut socket = initialize_network();
     let (net_tx, net_rx) = (socket.get_packet_sender(), socket.get_event_receiver());
 
-    let network_thread = std::thread::spawn(move || socket.start_polling());
+    let network_thread = std::thread::spawn(move || {
+        socket.start_polling_with_duration(Some(std::time::Duration::from_millis(
+            (1000 / TICK_RATE_HZ / 2) as u64,
+        )))
+    });
 
     commands.insert_resource(NetworkThread(network_thread));
     commands.insert_resource(NetTx(net_tx));
@@ -62,7 +67,12 @@ fn initialize_network() -> Socket {
         ..NetworkConfig::default()
     };
 
-    Socket::bind_with_config(BIND_ADDR, net_config).expect("Couldn't bind to server BIND_ADDR")
+    let socket =
+        Socket::bind_with_config(BIND_ADDR, net_config).expect("Couldn't bind to server BIND_ADDR");
+
+    println!("Listening on {:?}", BIND_ADDR);
+
+    socket
 }
 
 fn network_receive(
@@ -74,9 +84,9 @@ fn network_receive(
     let players = &mut players.0;
     let net_rx = &net_rx.0;
 
-    println!("Network tick");
+    // println!("Network tick");
 
-    while let Ok(event) = net_rx.try_recv() {
+    for event in net_rx.try_iter() {
         match event {
             SocketEvent::Packet(packet) => {
                 let msg = packet.payload();
@@ -127,12 +137,12 @@ pub enum PacketDestination {
 
 fn network_send(
     net_tx: Res<NetTx>,
-    mut outgoing_packets: EventReader<OutgoingPacket>,
+    mut outgoing_packets: ResMut<Events<OutgoingPacket>>,
     player_addrs: Query<&PlayerNetworkAddr>,
 ) {
     let net_tx = &net_tx.0;
 
-    for outgoing in outgoing_packets.iter() {
+    for outgoing in outgoing_packets.drain() {
         let data = bincode::serialize(&outgoing.packet).unwrap();
 
         match &outgoing.destination {

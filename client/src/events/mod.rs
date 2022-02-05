@@ -1,5 +1,6 @@
 use sus_common::network::{ClientToServer, DeliveryType};
 
+#[derive(Debug)]
 pub struct OutgoingPacket {
     pub packet: ClientToServer,
     pub delivery_type: DeliveryType,

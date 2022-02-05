@@ -22,7 +22,7 @@ use sus_common::{
         bevy::{
             bevy_ecs,
             schedule::{ShouldRun, State},
-            App, Commands, Component, EventReader, EventWriter, FixedTimestep, In,
+            App, Commands, Component, EventReader, EventWriter, Events, FixedTimestep, In,
             ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet, Transform,
         },
         glam::{vec3, Vec3},
@@ -84,7 +84,7 @@ fn update_lobby(
     lobby_timer: Query<&LobbyTimer>,
     mut players: Query<(&PlayerId, &mut Transform, &mut UnprocessedInputs, &mut LastInputCounter)>,
 ) {
-    println!("Lobby tick");
+    // println!("Lobby tick");
     let lobby_timer = lobby_timer.single().0;
 
     if lobby_timer.elapsed() > LOBBY_COUNTDOWN_TIME {
@@ -154,7 +154,7 @@ fn handle_player_input(
 
 fn new_player_joined(
     mut commands: Commands,
-    mut new_player_rx: EventReader<NewPlayer>,
+    mut new_player_rx: ResMut<Events<NewPlayer>>,
     mut players: ResMut<AddrToPlayer>,
     mut player_to_entity: ResMut<PlayerToEntity>,
     mut player_id_counter: ResMut<PlayerIdCounter>,
@@ -163,7 +163,7 @@ fn new_player_joined(
 ) {
     let player_id_counter = &mut player_id_counter.0;
 
-    for new_player in new_player_rx.iter() {
+    for new_player in new_player_rx.drain() {
         let new_player_id = *player_id_counter;
         *player_id_counter += 1;
 
