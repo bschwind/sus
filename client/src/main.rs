@@ -18,8 +18,8 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
-            App, BevyGame, Commands, CorePlugin, EventReader, EventWriter, FixedTimestep,
-            IntoSystem, Query, Res, ResMut, SystemSet, Transform, With,
+            App, BevyGame, Commands, CorePlugin, EventReader, EventWriter, FixedTimestep, Query,
+            Res, ResMut, SystemSet, Transform, With,
         },
         glam::{vec3, Vec3},
         winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
@@ -65,10 +65,10 @@ impl BevyGame for SusGame {
             .add_plugin(CorePlugin)
             .insert_resource(game)
             .insert_resource(MyName(my_name))
-            .add_startup_system(init.system())
+            .add_startup_system(init)
             .add_plugin(ClientNetworkPlugin::new(Self::desired_fps()))
             .add_plugin(RenderPlugin)
-            .add_system(handle_input.system())
+            .add_system(handle_input)
             .add_system_set(
                 SystemSet::new()
                     .after(labels::NetworkSystem::Receive)
@@ -76,12 +76,12 @@ impl BevyGame for SusGame {
                         FixedTimestep::step(1.0 / Self::desired_fps() as f64)
                             .with_label(GAME_TIMESTEP_LABEL),
                     )
-                    .with_system(send_input_to_server.system())
-                    .with_system(handle_connect_ack.system())
-                    .with_system(handle_full_game_state.system())
-                    .with_system(new_player_joined.system())
-                    .with_system(handle_lobby_tick.system())
-                    .with_system(update_game.system()),
+                    .with_system(send_input_to_server)
+                    .with_system(handle_connect_ack)
+                    .with_system(handle_full_game_state)
+                    .with_system(new_player_joined)
+                    .with_system(handle_lobby_tick)
+                    .with_system(update_game),
             );
 
         ecs_world_builder

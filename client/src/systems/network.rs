@@ -8,8 +8,8 @@ use sus_common::{
     },
     resources::network::{NetRx, NetTx, NetworkThread},
     simple_game::bevy::{
-        App, Commands, EventReader, EventWriter, FixedTimestep, IntoSystem,
-        ParallelSystemDescriptorCoercion, Plugin, Res, ResMut, SystemSet,
+        App, Commands, EventReader, EventWriter, FixedTimestep, ParallelSystemDescriptorCoercion,
+        Plugin, Res, ResMut, SystemSet,
     },
     systems::labels,
 };
@@ -26,7 +26,7 @@ impl ClientNetworkPlugin {
 
 impl Plugin for ClientNetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup.system())
+        app.add_startup_system(setup)
             .add_event::<ConnectAckPacket>()
             .add_event::<NewPlayerPacket>()
             .add_event::<FullGameStatePacket>()
@@ -38,7 +38,7 @@ impl Plugin for ClientNetworkPlugin {
                         FixedTimestep::step(self.fixed_timestep).with_label(GAME_TIMESTEP_LABEL),
                     )
                     .label(labels::Network)
-                    .with_system(network_receive.system().label(labels::NetworkSystem::Receive)),
+                    .with_system(network_receive.label(labels::NetworkSystem::Receive)),
             )
             .add_system_set(
                 SystemSet::new()
@@ -46,10 +46,7 @@ impl Plugin for ClientNetworkPlugin {
                         FixedTimestep::step(self.fixed_timestep).with_label(GAME_TIMESTEP_LABEL),
                     )
                     .with_system(
-                        network_send
-                            .system()
-                            .label(labels::NetworkSystem::SendPackets)
-                            .after(labels::Lobby), // TODO - Use better ordering here.
+                        network_send.label(labels::NetworkSystem::SendPackets).after(labels::Lobby), // TODO - Use better ordering here.
                     ),
             );
     }

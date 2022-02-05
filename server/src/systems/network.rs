@@ -12,8 +12,8 @@ use sus_common::{
         PlayerToEntity,
     },
     simple_game::bevy::{
-        App, Commands, EventReader, EventWriter, IntoSystem, ParallelSystemDescriptorCoercion,
-        Plugin, Query, Res, ResMut, SystemSet,
+        App, Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion, Plugin, Query,
+        Res, ResMut, SystemSet,
     },
     systems::labels,
 };
@@ -25,20 +25,17 @@ pub struct PlayerIdCounter(pub u16);
 
 impl Plugin for ServerNetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup.system())
+        app.add_startup_system(setup)
             .add_event::<PlayerInput>()
             .add_event::<NewPlayer>()
             .add_event::<OutgoingPacket>()
             .add_system_set(
                 SystemSet::new()
                     .label(labels::Network)
-                    .with_system(network_receive.system().label(labels::NetworkSystem::Receive)),
+                    .with_system(network_receive.label(labels::NetworkSystem::Receive)),
             )
             .add_system(
-                network_send
-                    .system()
-                    .label(labels::NetworkSystem::SendPackets)
-                    .after(labels::Lobby), // TODO - Use better ordering here.
+                network_send.label(labels::NetworkSystem::SendPackets).after(labels::Lobby), // TODO - Use better ordering here.
             );
     }
 }

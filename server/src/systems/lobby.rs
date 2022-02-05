@@ -22,9 +22,8 @@ use sus_common::{
         bevy::{
             bevy_ecs,
             schedule::{ShouldRun, State},
-            App, Commands, Component, EventReader, EventWriter, FixedTimestep, In, IntoChainSystem,
-            IntoSystem, ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet,
-            Transform,
+            App, Commands, Component, EventReader, EventWriter, FixedTimestep, In,
+            ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet, Transform,
         },
         glam::{vec3, Vec3},
     },
@@ -45,8 +44,8 @@ impl LobbyPlugin {
 
 impl Plugin for LobbyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup.system())
-            .add_system_set(SystemSet::on_enter(GameState::Lobby).with_system(setup_lobby.system()))
+        app.add_startup_system(setup)
+            .add_system_set(SystemSet::on_enter(GameState::Lobby).with_system(setup_lobby))
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(fixed_timestep_with_state!(
@@ -57,15 +56,14 @@ impl Plugin for LobbyPlugin {
                     .after(labels::Network)
                     .with_system(
                         handle_player_input
-                            .system()
                             .label(labels::NetworkSystem::PlayerInput)
                             .after(labels::NetworkSystem::Receive),
                     )
-                    .with_system(update_lobby.system().after(labels::NetworkSystem::PlayerInput))
-                    .with_system(send_new_state.system().label(labels::NetworkSystem::SendPackets))
-                    .with_system(new_player_joined.system()),
+                    .with_system(update_lobby.after(labels::NetworkSystem::PlayerInput))
+                    .with_system(send_new_state.label(labels::NetworkSystem::SendPackets))
+                    .with_system(new_player_joined),
             )
-            .add_system_set(SystemSet::on_exit(GameState::Lobby).with_system(close_lobby.system()));
+            .add_system_set(SystemSet::on_exit(GameState::Lobby).with_system(close_lobby));
     }
 }
 
