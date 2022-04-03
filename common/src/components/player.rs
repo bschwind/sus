@@ -20,6 +20,9 @@ pub struct LastInputCounter(pub u16);
 #[derive(Debug, Component)]
 pub struct UnprocessedInputs(pub VecDeque<PlayerInputPacket>);
 
+#[derive(Debug, Component)]
+pub struct PositionHistory(pub Vec<(f32, f32)>);
+
 impl Default for UnprocessedInputs {
     fn default() -> Self {
         UnprocessedInputs(VecDeque::new())

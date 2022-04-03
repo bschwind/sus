@@ -73,6 +73,7 @@ pub struct LobbyTickPacket {
 pub struct LobbyPlayer {
     pub id: u16,
     pub pos: (f32, f32),
+    pub pos_history: Vec<(f32, f32)>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

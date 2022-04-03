@@ -10,7 +10,8 @@ use std::{
 };
 use sus_common::{
     components::player::{
-        LastInputCounter, PlayerId, PlayerName, PlayerNetworkAddr, UnprocessedInputs,
+        LastInputCounter, PlayerId, PlayerName, PlayerNetworkAddr, PositionHistory,
+        UnprocessedInputs,
     },
     math::NormalizedInt,
     network::{
@@ -60,9 +61,14 @@ impl Plugin for LobbyPlugin {
                             .after(labels::NetworkSystem::Receive),
                     )
                     .with_system(update_lobby.after(labels::NetworkSystem::PlayerInput))
-                    .with_system(send_new_state.label(labels::NetworkSystem::SendPackets))
                     .with_system(new_player_joined),
             )
+            .add_system_set(
+                SystemSet::on_update(GameState::Lobby)
+                    .with_system(update_lobby_timer)
+                    .after(labels::Lobby),
+            )
+            .add_system(send_new_state.label(labels::NetworkSystem::SendPackets))
             .add_system_set(SystemSet::on_exit(GameState::Lobby).with_system(close_lobby));
     }
 }
@@ -80,11 +86,39 @@ fn setup_lobby() {
 }
 
 fn update_lobby(
-    mut game_state: ResMut<State<GameState>>,
-    lobby_timer: Query<&LobbyTimer>,
-    mut players: Query<(&PlayerId, &mut Transform, &mut UnprocessedInputs, &mut LastInputCounter)>,
+    mut players: Query<(
+        &PlayerId,
+        &mut Transform,
+        &mut UnprocessedInputs,
+        &mut PositionHistory,
+        &mut LastInputCounter,
+    )>,
 ) {
     // println!("Lobby tick");
+
+    for (
+        player_id,
+        mut transform,
+        mut unprocessed_inputs,
+        mut position_history,
+        mut last_input_counter,
+    ) in players.iter_mut()
+    {
+        if let Some(input) = unprocessed_inputs.0.pop_front() {
+            if input.counter.sequentially_greater_than(last_input_counter.0) {
+                last_input_counter.0 = input.counter;
+                println!("Moving player ID {} with input {:?}", player_id.0, input);
+
+                let velocity = vec3(input.x.normalized(), input.y.normalized(), 0.0);
+
+                position_history.0.push((transform.translation.x, transform.translation.y));
+                transform.translation += velocity * 0.1;
+            }
+        }
+    }
+}
+
+fn update_lobby_timer(mut game_state: ResMut<State<GameState>>, lobby_timer: Query<&LobbyTimer>) {
     let lobby_timer = lobby_timer.single().0;
 
     if lobby_timer.elapsed() > LOBBY_COUNTDOWN_TIME {
@@ -93,35 +127,32 @@ fn update_lobby(
             game_state.set(GameState::IntroScreen).unwrap();
         }
     }
-
-    for (player_id, mut transform, mut unprocessed_inputs, mut last_input_counter) in
-        players.iter_mut()
-    {
-        if let Some(input) = unprocessed_inputs.0.pop_front() {
-            if input.counter.sequentially_greater_than(last_input_counter.0) {
-                last_input_counter.0 = input.counter;
-                println!("Moving player ID {} with input {:?}", player_id.0, input);
-
-                let velocity = vec3(input.x.normalized(), input.y.normalized(), 0.0);
-                transform.translation += velocity * 0.1;
-            }
-        }
-    }
 }
 
 fn send_new_state(
-    players: Query<(&PlayerId, &Transform, &PlayerNetworkAddr, &LastInputCounter)>,
+    mut players: Query<(
+        &PlayerId,
+        &Transform,
+        &PlayerNetworkAddr,
+        &mut PositionHistory,
+        &LastInputCounter,
+    )>,
     mut outgoing_packets: EventWriter<OutgoingPacket>,
 ) {
     let players_vec: Vec<_> = players
         .iter()
-        .map(|(id, transform, _, _)| LobbyPlayer {
+        .map(|(id, transform, _, position_history, _)| LobbyPlayer {
             id: id.0,
             pos: (transform.translation.x, transform.translation.y),
+            pos_history: position_history.0.clone(),
         })
         .collect();
 
-    for (_player_id, _transform, network_addr, last_input_counter) in players.iter() {
+    for (_player_id, _transform, network_addr, mut position_history, last_input_counter) in
+        players.iter_mut()
+    {
+        position_history.0.clear();
+
         let packet = ServerToClient::LobbyTick(LobbyTickPacket {
             last_input_counter: last_input_counter.0,
             players: players_vec.clone(),
@@ -176,6 +207,7 @@ fn new_player_joined(
                 name: PlayerName(new_player.connect_packet.name.clone()),
                 network_addr: PlayerNetworkAddr(new_player.addr),
                 unprocessed_inputs: UnprocessedInputs(VecDeque::new()),
+                position_history: PositionHistory(Vec::new()),
                 last_input_counter: LastInputCounter(0),
                 transform: Transform::from_translation(Vec3::ZERO),
             })
@@ -225,4 +257,6 @@ fn new_player_joined(
     }
 }
 
-fn close_lobby() {}
+fn close_lobby() {
+    println!("lobby is closed");
+}

@@ -214,7 +214,15 @@ fn handle_lobby_tick(
         for player in &lobby_tick.players {
             if let Some(player_entity) = player_to_entity.0.get(&player.id) {
                 if let Ok((_, mut transform)) = players.get_mut(*player_entity) {
-                    transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
+                    if let Some(my_player_id) = my_player_id.0 {
+                        if my_player_id == player.id {
+                            // Update my player
+                            transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
+                        } else {
+                            // Handle updating the other players
+                            transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
+                        }
+                    }
                 }
             }
         }
