@@ -22,8 +22,9 @@ use sus_common::{
     simple_game::{
         bevy::{
             bevy_ecs,
+            bevy_ecs::event::Events,
             schedule::{ShouldRun, State},
-            App, Commands, Component, EventReader, EventWriter, Events, FixedTimestep, In,
+            App, Commands, Component, EventReader, EventWriter, FixedTimestep, In,
             ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet, Transform,
         },
         glam::{vec3, Vec3},

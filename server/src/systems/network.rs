@@ -13,8 +13,8 @@ use sus_common::{
         PlayerToEntity,
     },
     simple_game::bevy::{
-        App, Commands, EventWriter, Events, ParallelSystemDescriptorCoercion, Plugin, Query, Res,
-        ResMut, SystemSet,
+        bevy_ecs::event::Events, App, Commands, EventWriter, ParallelSystemDescriptorCoercion,
+        Plugin, Query, Res, ResMut, SystemSet,
     },
     systems::labels,
 };
