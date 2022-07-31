@@ -18,8 +18,8 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
-            App, BevyGame, Commands, CorePlugin, EventReader, EventWriter, FixedTimestep, Query,
-            Res, ResMut, SystemSet, Transform, With,
+            App, BevyGame, Commands, EventReader, EventWriter, FixedTimestep, Query, Res, ResMut,
+            SimpleGamePlugin, SystemSet, Transform, With,
         },
         glam::{vec3, Vec3},
         winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
@@ -62,7 +62,7 @@ impl BevyGame for SusGame {
         let my_name = "Brian".to_string();
 
         ecs_world_builder
-            .add_plugin(CorePlugin)
+            .add_plugin(SimpleGamePlugin)
             .insert_resource(game)
             .insert_resource(MyName(my_name))
             .add_startup_system(init)
