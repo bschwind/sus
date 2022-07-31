@@ -1459,6 +1459,7 @@ dependencies = [
 [[package]]
 name = "simple-game"
 version = "0.1.0"
+source = "git+https://github.com/bschwind/simple-game?branch=master#ca6e029576fed05650a9a952675a8b6605ff370c"
 dependencies = [
  "bevy_app",
  "bevy_core",
