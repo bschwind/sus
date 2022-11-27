@@ -78,10 +78,7 @@ fn initialize_network() -> Socket {
         ..NetworkConfig::default()
     };
 
-    let socket =
-        Socket::bind_with_config("0.0.0.0:0", net_config).expect("Could not connect to server");
-
-    socket
+    Socket::bind_with_config("0.0.0.0:0", net_config).expect("Could not connect to server")
 }
 
 fn network_receive(

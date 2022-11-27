@@ -17,17 +17,11 @@ pub struct PlayerName(pub String);
 #[derive(Debug, Component)]
 pub struct LastInputCounter(pub u16);
 
-#[derive(Debug, Component, Resource)]
+#[derive(Debug, Default, Component, Resource)]
 pub struct UnprocessedInputs(pub VecDeque<PlayerInputPacket>);
 
 #[derive(Debug, Component)]
 pub struct PositionHistory(pub Vec<(f32, f32)>);
-
-impl Default for UnprocessedInputs {
-    fn default() -> Self {
-        UnprocessedInputs(VecDeque::new())
-    }
-}
 
 impl UnprocessedInputs {
     pub fn clear_acknowledged_inputs(&mut self, input_ack: u16) {

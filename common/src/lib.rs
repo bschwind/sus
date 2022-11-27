@@ -48,18 +48,12 @@ impl Player {
     }
 }
 
-#[derive(Debug, Resource)]
+#[derive(Debug, Default, Resource)]
 pub struct PlayerInput {
     pub up: bool,
     pub down: bool,
     pub left: bool,
     pub right: bool,
-}
-
-impl Default for PlayerInput {
-    fn default() -> Self {
-        Self { up: false, down: false, left: false, right: false }
-    }
 }
 
 impl PlayerInput {

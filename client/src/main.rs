@@ -219,8 +219,11 @@ fn handle_lobby_tick(
                             // Update my player
                             transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
                         } else {
-                            // Handle updating the other players
+                            // TODO - Handle updating the other players using the position history.
                             transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
+
+                            // Doing this for now just to make the if and else branches different.
+                            transform.scale = vec3(1.0, 1.0, 1.0);
                         }
                     }
                 }
