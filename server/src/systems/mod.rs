@@ -10,7 +10,7 @@ pub use network::*;
 #[allow(unused)]
 macro_rules! fixed_timestep_with_state {
     ($timestep:expr, $state_condition:expr$(,)*) => {
-        sus_common::simple_game::bevy::IntoChainSystem::chain(
+        sus_common::simple_game::bevy::IntoPipeSystem::pipe(
             FixedTimestep::step($timestep),
             (|In(input): In<ShouldRun>, state: Res<State<GameState>>| {
                 if state.current() == &($state_condition) {

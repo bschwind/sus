@@ -18,8 +18,8 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
-            App, BevyGame, Commands, EventReader, EventWriter, FixedTimestep, Query, Res, ResMut,
-            SimpleGamePlugin, SystemSet, Transform, With,
+            bevy_ecs, App, BevyGame, Commands, EventReader, EventWriter, FixedTimestep, Query, Res,
+            ResMut, Resource, SimpleGamePlugin, SystemSet, Transform, With,
         },
         glam::{vec3, Vec3},
         winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
@@ -37,6 +37,7 @@ mod systems;
 const SERVER_ADDR: &str = "127.0.0.1:7600";
 const GAME_TIMESTEP_LABEL: &str = "game_timestep";
 
+#[derive(Debug, Resource)]
 struct SusGame {
     server_addr: SocketAddr,
     connected: bool,
@@ -146,13 +147,14 @@ fn handle_connect_ack(
         println!("Got a connect ack");
 
         let entity_id = commands
-            .spawn()
-            .insert_bundle(ClientPlayerBundle {
-                id: PlayerId(connect_ack.id),
-                name: PlayerName(my_name.0.clone()),
-                transform: Transform::from_translation(Vec3::ZERO),
-            })
-            .insert(MyPlayer)
+            .spawn((
+                ClientPlayerBundle {
+                    id: PlayerId(connect_ack.id),
+                    name: PlayerName(my_name.0.clone()),
+                    transform: Transform::from_translation(Vec3::ZERO),
+                },
+                MyPlayer,
+            ))
             .id();
 
         my_player_id.0 = Some(connect_ack.id);
@@ -168,8 +170,7 @@ fn new_player_joined(
 ) {
     for new_player in new_player_rx.iter() {
         let entity_id = commands
-            .spawn()
-            .insert_bundle(ClientPlayerBundle {
+            .spawn(ClientPlayerBundle {
                 id: PlayerId(new_player.id),
                 name: PlayerName(new_player.name.clone()),
                 transform: Transform::from_translation(Vec3::ZERO),
@@ -188,8 +189,7 @@ fn handle_full_game_state(
     for full_game_state in full_game_state_rx.iter() {
         for player in &full_game_state.players {
             let entity_id = commands
-                .spawn()
-                .insert_bundle(ClientPlayerBundle {
+                .spawn(ClientPlayerBundle {
                     id: PlayerId(player.id),
                     name: PlayerName(player.name.clone()),
                     transform: Transform::from_translation(Vec3::ZERO),

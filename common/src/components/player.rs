@@ -1,11 +1,11 @@
 use crate::{network::SequenceCmp, PlayerInputPacket};
-use simple_game::bevy::{bevy_ecs, Component};
+use simple_game::bevy::{bevy_ecs, Component, Resource};
 use std::{collections::VecDeque, net::SocketAddr};
 
 #[derive(Debug, Component)]
 pub struct PlayerId(pub u16);
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Resource)]
 pub struct MyPlayerId(pub Option<u16>);
 
 #[derive(Debug, Component)]
@@ -17,7 +17,7 @@ pub struct PlayerName(pub String);
 #[derive(Debug, Component)]
 pub struct LastInputCounter(pub u16);
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Resource)]
 pub struct UnprocessedInputs(pub VecDeque<PlayerInputPacket>);
 
 #[derive(Debug, Component)]

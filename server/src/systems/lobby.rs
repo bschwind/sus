@@ -25,7 +25,7 @@ use sus_common::{
             bevy_ecs::event::Events,
             schedule::{ShouldRun, State},
             App, Commands, Component, EventReader, EventWriter, FixedTimestep, In,
-            ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, SystemSet, Transform,
+            IntoSystemDescriptor, Plugin, Query, Res, ResMut, SystemSet, Transform,
         },
         glam::{vec3, Vec3},
     },
@@ -79,7 +79,7 @@ struct LobbyTimer(Instant);
 const LOBBY_COUNTDOWN_TIME: Duration = Duration::from_secs(50);
 
 fn setup(mut commands: Commands) {
-    commands.spawn().insert(LobbyTimer(Instant::now()));
+    commands.spawn(LobbyTimer(Instant::now()));
 }
 
 fn setup_lobby() {
@@ -202,8 +202,7 @@ fn new_player_joined(
         println!("Spawning new player with id {}", new_player_id);
 
         let entity_id = commands
-            .spawn()
-            .insert_bundle(ServerPlayerBundle {
+            .spawn(ServerPlayerBundle {
                 id: PlayerId(new_player_id),
                 name: PlayerName(new_player.connect_packet.name.clone()),
                 network_addr: PlayerNetworkAddr(new_player.addr),

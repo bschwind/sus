@@ -13,8 +13,8 @@ use sus_common::{
         PlayerToEntity,
     },
     simple_game::bevy::{
-        bevy_ecs::event::Events, App, Commands, EventWriter, ParallelSystemDescriptorCoercion,
-        Plugin, Query, Res, ResMut, SystemSet,
+        bevy_ecs, bevy_ecs::event::Events, App, Commands, EventWriter, IntoSystemDescriptor,
+        Plugin, Query, Res, ResMut, Resource, SystemSet,
     },
     systems::labels,
 };
@@ -22,6 +22,8 @@ use sus_common::{
 const BIND_ADDR: &str = "0.0.0.0:7600";
 
 pub struct ServerNetworkPlugin;
+
+#[derive(Debug, Resource)]
 pub struct PlayerIdCounter(pub u16);
 
 impl Plugin for ServerNetworkPlugin {

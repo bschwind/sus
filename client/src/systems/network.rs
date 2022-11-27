@@ -8,8 +8,8 @@ use sus_common::{
     },
     resources::network::{NetRx, NetTx, NetworkThread},
     simple_game::bevy::{
-        bevy_ecs::event::Events, App, Commands, EventWriter, FixedTimestep,
-        ParallelSystemDescriptorCoercion, Plugin, Res, ResMut, SystemSet,
+        bevy_ecs::event::Events, App, Commands, EventWriter, FixedTimestep, IntoSystemDescriptor,
+        Plugin, Res, ResMut, SystemSet,
     },
     systems::labels,
 };

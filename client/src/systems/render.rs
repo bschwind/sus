@@ -2,9 +2,7 @@ use crate::SusGame;
 use sus_common::{
     components::player::PlayerId,
     simple_game::{
-        bevy::{
-            App, Commands, ParallelSystemDescriptorCoercion, Plugin, Query, Res, ResMut, Transform,
-        },
+        bevy::{App, Commands, IntoSystemDescriptor, Plugin, Query, Res, ResMut, Transform},
         graphics::{
             text::{AxisAlign, Color, DefaultFont, StyledText, TextAlignment, TextSystem},
             DebugDrawer, FullscreenQuad, GraphicsDevice,

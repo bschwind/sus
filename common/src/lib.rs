@@ -1,4 +1,5 @@
 use crate::network::PlayerInputPacket;
+use simple_game::bevy::{bevy_ecs, Resource};
 
 pub mod components;
 pub mod math;
@@ -47,7 +48,7 @@ impl Player {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Resource)]
 pub struct PlayerInput {
     pub up: bool,
     pub down: bool,
