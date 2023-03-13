@@ -21,14 +21,14 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
-            bevy_ecs, bevy_ecs::event::Events, in_state, schedule::State, App, Commands, Component,
+            bevy_ecs, bevy_ecs::event::Events, schedule::State, App, Commands, Component,
             CoreSchedule, EventReader, EventWriter, IntoSystemAppConfig, IntoSystemAppConfigs,
             IntoSystemConfig, IntoSystemConfigs, NextState, OnEnter, OnExit, OnUpdate, Plugin,
             Query, Res, ResMut, Transform,
         },
         glam::{vec3, Vec3},
     },
-    GameState,
+    state_active, GameState,
 };
 
 #[allow(unused)]
@@ -48,18 +48,15 @@ impl Plugin for LobbyPlugin {
             .add_system(setup_lobby.in_schedule(OnEnter(GameState::Lobby)))
             .add_systems(
                 (
-                    // https://github.com/bevyengine/bevy/issues/8059#issuecomment-1466255766
                     handle_player_input
                         .in_set(labels::NetworkSystem::PlayerInput)
-                        .after(labels::NetworkSystem::Receive)
-                        .run_if(in_state(GameState::Lobby)),
-                    update_lobby
-                        .after(labels::NetworkSystem::PlayerInput)
-                        .run_if(in_state(GameState::Lobby)),
-                    new_player_joined.run_if(in_state(GameState::Lobby)),
+                        .after(labels::NetworkSystem::Receive),
+                    update_lobby.after(labels::NetworkSystem::PlayerInput),
+                    new_player_joined,
                 )
                     .in_set(labels::Lobby)
                     .after(labels::Network)
+                    .distributive_run_if(state_active(GameState::Lobby))
                     .in_schedule(CoreSchedule::FixedUpdate),
             )
             .add_system(update_lobby_timer.after(labels::Lobby).in_set(OnUpdate(GameState::Lobby)))
