@@ -1,28 +1,42 @@
-use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
-use simple_game::{
-    bevy::{
-        App, AppBuilder, BevyGame, Commands, CorePlugin, EventReader, FixedTimestep, IntoSystem,
-        Res, ResMut, SystemSet,
-    },
-    graphics::{
-        text::{AxisAlign, Color, DefaultFont, StyledText, TextAlignment, TextSystem},
-        FullscreenQuad, GraphicsDevice,
-    },
-    wgpu,
-    winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
-    WindowDimensions,
+use crate::{
+    components::{ClientPlayerBundle, MyPlayer},
+    events::OutgoingPacket,
+    resources::{InputCounter, MyName},
+    systems::{labels, ClientNetworkPlugin, RenderPlugin},
 };
 use std::{
+    collections::{HashMap, VecDeque},
     net::SocketAddr,
-    time::{Duration, Instant},
 };
 use sus_common::{
-    network::{ClientToServer, ConnectPacket, PlayerInputPacket, ServerToClient},
+    components::player::{MyPlayerId, PlayerId, PlayerName, UnprocessedInputs},
+    math::NormalizedInt,
+    network::{
+        ClientToServer, ConnectAckPacket, DeliveryType, FullGameStatePacket, LobbyTickPacket,
+        NewPlayerPacket,
+    },
+    resources::PlayerToEntity,
+    simple_game::{
+        bevy::{
+            bevy_ecs, App, BevyGame, Commands, CoreSchedule, EventReader, EventWriter, FixedTime,
+            IntoSystemAppConfigs, IntoSystemConfigs, IntoSystemSetConfig, Query, Res, ResMut,
+            Resource, SimpleGamePlugin, Transform, With,
+        },
+        glam::{vec3, Vec3},
+        winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
+        WindowDimensions,
+    },
     PlayerInput,
 };
 
+mod components;
+mod events;
+mod resources;
+mod systems;
+
 const SERVER_ADDR: &str = "127.0.0.1:7600";
 
+#[derive(Debug, Resource)]
 struct SusGame {
     server_addr: SocketAddr,
     connected: bool,
@@ -41,65 +55,47 @@ impl BevyGame for SusGame {
         60
     }
 
-    fn init_systems() -> AppBuilder {
-        let mut ecs_world_builder = App::build();
+    fn init_systems() -> App {
+        let mut ecs_world_builder = App::new();
+
+        let game = SusGame { server_addr: SERVER_ADDR.parse().unwrap(), connected: false };
+        let my_name = "Brian".to_string();
 
         ecs_world_builder
-            .add_plugin(CorePlugin)
-            .add_startup_system(init.system())
-            .add_system(handle_input.system())
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(
-                        FixedTimestep::step(1.0 / Self::desired_fps() as f64)
-                            .with_label("game_timestep"),
-                    )
-                    .with_system(send_input_to_server.system())
-                    .with_system(update_network.system())
-                    .with_system(update_game.system()),
-            )
-            .add_system(render.system());
+            .add_plugin(SimpleGamePlugin)
+            .insert_resource(FixedTime::new_from_secs(1.0 / Self::desired_fps() as f32))
+            .insert_resource(game)
+            .insert_resource(MyName(my_name))
+            .add_startup_system(init)
+            .add_plugin(ClientNetworkPlugin)
+            .add_plugin(RenderPlugin)
+            .configure_set(labels::MainLogic.after(labels::NetworkSystem::Receive))
+            .add_system(handle_input)
+            .add_systems(
+                (
+                    send_input_to_server,
+                    handle_connect_ack,
+                    handle_full_game_state,
+                    new_player_joined,
+                    handle_lobby_tick,
+                    update_game,
+                )
+                    .after(handle_input)
+                    .after(labels::NetworkSystem::Receive)
+                    .in_set(labels::MainLogic)
+                    .in_schedule(CoreSchedule::FixedUpdate),
+            );
 
         ecs_world_builder
     }
 }
 
-fn init(mut commands: Commands, graphics_device: Res<GraphicsDevice>) {
-    let game = SusGame { server_addr: SERVER_ADDR.parse().unwrap(), connected: false };
-
-    let text_system: TextSystem = TextSystem::new(&graphics_device);
-    let fullscreen_quad = FullscreenQuad::new(&graphics_device);
-    let player_input = PlayerInput::default();
-
-    let socket = initialize_network(&game);
-
-    commands.insert_resource(game);
-    commands.insert_resource(text_system);
-    commands.insert_resource(fullscreen_quad);
-    commands.insert_resource(player_input);
-    commands.insert_resource(socket);
-}
-
-fn initialize_network(game: &SusGame) -> Socket {
-    let net_config = NetworkConfig {
-        idle_connection_timeout: Duration::from_secs(5),
-        heartbeat_interval: Some(Duration::from_secs(4)),
-        ..NetworkConfig::default()
-    };
-
-    let mut socket =
-        Socket::bind_with_config("127.0.0.1:0", net_config).expect("Could not connect to server");
-
-    let connect_packet = ClientToServer::Connect(ConnectPacket::new("Brian"));
-    socket
-        .send(Packet::reliable_ordered(
-            game.server_addr,
-            bincode::serialize(&connect_packet).unwrap(),
-            None,
-        ))
-        .expect("Could not send packet to server");
-
-    socket
+fn init(mut commands: Commands) {
+    commands.insert_resource(PlayerInput::default());
+    commands.insert_resource(InputCounter(0));
+    commands.insert_resource(MyPlayerId(None));
+    commands.insert_resource(PlayerToEntity(HashMap::new()));
+    commands.insert_resource(UnprocessedInputs(VecDeque::new()));
 }
 
 fn handle_input(
@@ -122,140 +118,144 @@ fn handle_input(
 }
 
 fn send_input_to_server(
-    game: Res<SusGame>,
     player_input: Res<PlayerInput>,
-    mut socket: ResMut<Socket>,
+    mut input_counter: ResMut<InputCounter>,
+    mut unprocessed_inputs: ResMut<UnprocessedInputs>,
+    mut outgoing_packets: EventWriter<OutgoingPacket>,
 ) {
-    let input_packet = PlayerInputPacket::from(&*player_input);
+    let input_packet = player_input.to_player_input_packet(input_counter.0);
+    unprocessed_inputs.0.push_back(input_packet);
+
+    input_counter.0 = input_counter.0.wrapping_add(1);
+
     let msg = ClientToServer::PlayerInput(input_packet);
 
-    socket
-        .send(Packet::unreliable_sequenced(
-            game.server_addr,
-            bincode::serialize(&msg).unwrap(),
-            Some(sus_common::network::INPUT_STREAM),
-        ))
-        .expect("Could not send packet to server");
+    outgoing_packets.send(OutgoingPacket::new(
+        msg,
+        DeliveryType::UnreliableSequenced,
+        Some(sus_common::network::INPUT_STREAM),
+    ));
 }
 
-fn update_network(mut game: ResMut<SusGame>, mut socket: ResMut<Socket>) {
-    let now = Instant::now();
-    socket.manual_poll(now);
+fn handle_connect_ack(
+    mut commands: Commands,
+    mut connect_ack_rx: EventReader<ConnectAckPacket>,
+    my_name: Res<MyName>,
+    mut player_to_entity: ResMut<PlayerToEntity>,
+    mut my_player_id: ResMut<MyPlayerId>,
+) {
+    for connect_ack in connect_ack_rx.iter() {
+        println!("Got a connect ack");
 
-    match socket.recv() {
-        Some(SocketEvent::Packet(packet)) => {
-            let msg = packet.payload();
+        let entity_id = commands
+            .spawn((
+                ClientPlayerBundle {
+                    id: PlayerId(connect_ack.id),
+                    name: PlayerName(my_name.0.clone()),
+                    transform: Transform::from_translation(Vec3::ZERO),
+                },
+                MyPlayer,
+            ))
+            .id();
 
-            if packet.addr() == game.server_addr {
-                if let Ok(decoded) = bincode::deserialize::<ServerToClient>(msg) {
-                    match decoded {
-                        ServerToClient::ConnectAck => {
-                            println!("Server accepted us, yay!");
-                            game.connected = true;
-                        },
-                        ServerToClient::NewPlayer(new_player_packet) => {
-                            println!("New player: {:?}", new_player_packet);
-                        },
-                        ServerToClient::FullGameState(full_game_state) => {
-                            println!("Full game state: {:?}", full_game_state);
-                        },
-                        ServerToClient::PlayerMovement => {
-                            println!("Player moved!");
-                        },
-                    }
-                }
-            } else {
-                println!("Unknown sender.");
-            }
-        },
-        Some(SocketEvent::Timeout(addr)) => {
-            println!("Server timed out: {}", addr);
-        },
-        Some(SocketEvent::Connect(addr)) => {
-            println!("Server connected: {}", addr);
-        },
-        Some(SocketEvent::Disconnect(addr)) => {
-            println!("Server disconnected: {}", addr);
-        },
-        None => {},
+        my_player_id.0 = Some(connect_ack.id);
+
+        player_to_entity.0.insert(connect_ack.id, entity_id);
     }
 }
 
-fn update_game(_player_input: Res<PlayerInput>) {
+fn new_player_joined(
+    mut commands: Commands,
+    mut new_player_rx: EventReader<NewPlayerPacket>,
+    mut player_to_entity: ResMut<PlayerToEntity>,
+) {
+    for new_player in new_player_rx.iter() {
+        let entity_id = commands
+            .spawn(ClientPlayerBundle {
+                id: PlayerId(new_player.id),
+                name: PlayerName(new_player.name.clone()),
+                transform: Transform::from_translation(Vec3::ZERO),
+            })
+            .id();
+
+        player_to_entity.0.insert(new_player.id, entity_id);
+    }
+}
+
+fn handle_full_game_state(
+    mut commands: Commands,
+    mut full_game_state_rx: EventReader<FullGameStatePacket>,
+    mut player_to_entity: ResMut<PlayerToEntity>,
+) {
+    for full_game_state in full_game_state_rx.iter() {
+        for player in &full_game_state.players {
+            let entity_id = commands
+                .spawn(ClientPlayerBundle {
+                    id: PlayerId(player.id),
+                    name: PlayerName(player.name.clone()),
+                    transform: Transform::from_translation(Vec3::ZERO),
+                })
+                .id();
+
+            player_to_entity.0.insert(player.id, entity_id);
+        }
+    }
+}
+
+fn handle_lobby_tick(
+    player_to_entity: Res<PlayerToEntity>,
+    mut lobby_tick_rx: EventReader<LobbyTickPacket>,
+    mut unprocessed_inputs: ResMut<UnprocessedInputs>,
+    my_player_id: Res<MyPlayerId>,
+    mut players: Query<(&PlayerId, &mut Transform)>,
+) {
+    for lobby_tick in lobby_tick_rx.iter() {
+        unprocessed_inputs.clear_acknowledged_inputs(lobby_tick.last_input_counter);
+
+        for player in &lobby_tick.players {
+            if let Some(player_entity) = player_to_entity.0.get(&player.id) {
+                if let Ok((_, mut transform)) = players.get_mut(*player_entity) {
+                    if let Some(my_player_id) = my_player_id.0 {
+                        if my_player_id == player.id {
+                            // Update my player
+                            transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
+                        } else {
+                            // TODO - Handle updating the other players using the position history.
+                            transform.translation = vec3(player.pos.0, player.pos.1, 0.0);
+
+                            // Doing this for now just to make the if and else branches different.
+                            transform.scale = vec3(1.0, 1.0, 1.0);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Apply all unacknowledged inputs
+        if let Some(my_player_id) = my_player_id.0 {
+            if let Some(my_player_entity) = player_to_entity.0.get(&my_player_id) {
+                if let Ok((_, mut transform)) = players.get_mut(*my_player_entity) {
+                    for input in &unprocessed_inputs.0 {
+                        let velocity = vec3(input.x.normalized(), input.y.normalized(), 0.0);
+                        transform.translation += velocity * 0.1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn update_game(
+    player_input: Res<PlayerInput>,
+    mut players: Query<(&PlayerId, &mut Transform), With<MyPlayer>>,
+) {
+    if let Ok((_my_player_id, mut transform)) = players.get_single_mut() {
+        let velocity = vec3(player_input.x().normalized(), player_input.y().normalized(), 0.0);
+        transform.translation += velocity * 0.1;
+    }
     // println!("player_input: {:?}", *player_input);
 }
 
-fn render(
-    game: Res<SusGame>,
-    mut graphics_device: ResMut<GraphicsDevice>,
-    fullscreen_quad: ResMut<FullscreenQuad>,
-    mut text_system: ResMut<TextSystem>,
-) {
-    let mut frame_encoder = graphics_device.begin_frame();
-
-    {
-        let encoder = &mut frame_encoder.encoder;
-
-        let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Screen Clear"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &frame_encoder.backbuffer_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: true,
-                },
-            }],
-            depth_stencil_attachment: None,
-        });
-    }
-
-    fullscreen_quad.render(&mut frame_encoder);
-
-    text_system.render_horizontal(
-        TextAlignment {
-            x: AxisAlign::Start(10),
-            y: AxisAlign::WindowCenter,
-            max_width: None,
-            max_height: None,
-        },
-        &[
-            StyledText::default_styling("This is a test."),
-            StyledText {
-                text: "Another test, blue this time",
-                font: DefaultFont::SpaceMono400(40),
-                color: Color::new(0, 0, 255, 255),
-            },
-            StyledText {
-                text: "\nTest with a line break, green.",
-                font: DefaultFont::SpaceMono400(40),
-                color: Color::new(0, 255, 0, 255),
-            },
-            StyledText {
-                text: "Red test\nHere are some numbers:\n0123456789!@#$%^&*(){}[].",
-                font: DefaultFont::SpaceMono400(40),
-                color: Color::new(255, 0, 0, 255),
-            },
-            StyledText {
-                text: "\nOpacity test, this should be half-faded white",
-                font: DefaultFont::SpaceMono400(40),
-                color: Color::new(255, 255, 255, 128),
-            },
-            StyledText {
-                text: &format!(
-                    "\nServer addr: {}\nConnected: {}",
-                    game.server_addr, game.connected
-                ),
-                font: DefaultFont::SpaceMono400(40),
-                color: Color::new(255, 255, 255, 255),
-            },
-        ],
-        &mut frame_encoder,
-    );
-
-    frame_encoder.finish();
-}
-
 fn main() {
-    simple_game::bevy::run_bevy_game::<SusGame>();
+    sus_common::simple_game::bevy::run_bevy_game::<SusGame>();
 }

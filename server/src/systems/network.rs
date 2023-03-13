@@ -1,66 +1,44 @@
-use crate::{systems::labels, MAX_PLAYERS};
-use crossbeam_channel::{Receiver, Sender};
-use laminar::{Config as NetworkConfig, Packet, Socket, SocketEvent};
-use simple_game::bevy::{
-    AppBuilder, Commands, EventReader, EventWriter, IntoSystem, ParallelSystemDescriptorCoercion,
-    Plugin, Res, ResMut, SystemSet,
+use crate::{
+    events::{NewPlayer, OutgoingPacket, PlayerInput},
+    resources::AddrToPlayer,
+    systems::labels,
+    TICK_RATE_HZ,
 };
-use std::{collections::HashMap, net::SocketAddr, thread::JoinHandle, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use sus_common::{
-    network::{
-        ClientToServer, ConnectPacket, FullGameStatePacket, NewPlayerPacket, PlayerInputPacket,
-        ServerToClient,
+    components::player::PlayerNetworkAddr,
+    laminar::{Config as NetworkConfig, Socket, SocketEvent},
+    network::{make_packet, ClientToServer},
+    resources::{
+        network::{NetRx, NetTx, NetworkThread},
+        PlayerToEntity,
     },
-    Player,
+    simple_game::bevy::{
+        bevy_ecs, bevy_ecs::event::Events, App, Commands, EventWriter, IntoSystemConfig, Plugin,
+        Query, Res, ResMut, Resource,
+    },
 };
 
 const BIND_ADDR: &str = "0.0.0.0:7600";
 
-pub struct NetworkPlugin;
+pub struct ServerNetworkPlugin;
 
-struct NetworkThread(JoinHandle<()>);
-struct NetTx(Sender<laminar::Packet>);
-struct NetRx(Receiver<SocketEvent>);
-struct AddrToPlayer(HashMap<SocketAddr, Player>);
-struct PlayerIdCounter(u16);
+#[derive(Debug, Resource)]
+pub struct PlayerIdCounter(pub u16);
 
-struct NewPlayer {
-    addr: SocketAddr,
-    connect_packet: ConnectPacket,
-}
-
-struct PlayerInput {
-    id: u16,
-    input: PlayerInputPacket,
-}
-
-impl Plugin for NetworkPlugin {
-    fn build(&self, app: &mut AppBuilder) {
-        app.add_startup_system(setup.system())
+impl Plugin for ServerNetworkPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_startup_system(setup)
             .add_event::<PlayerInput>()
-            .add_event::<NewPlayer>()
-            .add_event::<OutgoingPacket>()
-            .add_system_set(
-                SystemSet::new()
-                    .label(labels::Network)
-                    .with_system(network_receive.system().label(labels::NetworkSystem::Receive))
-                    .with_system(
-                        handle_player_input
-                            .system()
-                            .label(labels::NetworkSystem::PlayerInput)
-                            .after(labels::NetworkSystem::Receive),
-                    )
-                    .with_system(
-                        handle_new_player
-                            .system()
-                            .label(labels::NetworkSystem::NewPlayer)
-                            .after(labels::NetworkSystem::Receive),
-                    ),
+            .init_resource::<Events<NewPlayer>>()
+            .init_resource::<Events<OutgoingPacket>>()
+            .add_system(
+                network_receive.in_set(labels::NetworkSystem::Receive).in_set(labels::Network),
             )
             .add_system(
                 network_send
-                    .system()
-                    .label(labels::NetworkSystem::SendPackets)
+                    .in_set(labels::NetworkSystem::SendPackets)
+                    .in_set(labels::Network)
                     .after(labels::Lobby), // TODO - Use better ordering here.
             );
     }
@@ -70,12 +48,17 @@ fn setup(mut commands: Commands) {
     let mut socket = initialize_network();
     let (net_tx, net_rx) = (socket.get_packet_sender(), socket.get_event_receiver());
 
-    let network_thread = std::thread::spawn(move || socket.start_polling());
+    let network_thread = std::thread::spawn(move || {
+        socket.start_polling_with_duration(Some(std::time::Duration::from_millis(
+            (1000 / TICK_RATE_HZ / 2) as u64,
+        )))
+    });
 
     commands.insert_resource(NetworkThread(network_thread));
     commands.insert_resource(NetTx(net_tx));
     commands.insert_resource(NetRx(net_rx));
     commands.insert_resource(AddrToPlayer(HashMap::new()));
+    commands.insert_resource(PlayerToEntity(HashMap::new()));
     commands.insert_resource(PlayerIdCounter(0));
 }
 
@@ -87,78 +70,12 @@ fn initialize_network() -> Socket {
         ..NetworkConfig::default()
     };
 
-    Socket::bind_with_config(BIND_ADDR, net_config).expect("Couldn't bind to server BIND_ADDR")
-}
+    let socket =
+        Socket::bind_with_config(BIND_ADDR, net_config).expect("Couldn't bind to server BIND_ADDR");
 
-fn handle_player_input(mut input_rx: EventReader<PlayerInput>) {
-    for event in input_rx.iter() {
-        println!("Player (id={}) sent input: {:?}", event.id, event.input);
-    }
-}
+    println!("Listening on {:?}", BIND_ADDR);
 
-fn handle_new_player(
-    mut players: ResMut<AddrToPlayer>,
-    mut player_id_counter: ResMut<PlayerIdCounter>,
-    mut outgoing_packets: EventWriter<OutgoingPacket>,
-    mut new_player_rx: EventReader<NewPlayer>,
-) {
-    let players = &mut players.0;
-    let player_id_counter = &mut player_id_counter.0;
-
-    for new_player in new_player_rx.iter() {
-        let addr = new_player.addr;
-        let connect_packet = &new_player.connect_packet;
-
-        println!(
-            "{} (ip = {}) connected with game version {}",
-            connect_packet.name, addr, connect_packet.version
-        );
-
-        if players.len() >= MAX_PLAYERS {
-            println!("Max players exceeded, not accepting");
-        } else {
-            let new_player_id = *player_id_counter;
-            let new_player_pos = (0, 0);
-            players.insert(addr, Player::new(&connect_packet.name, new_player_id));
-            *player_id_counter += 1;
-
-            let reply = ServerToClient::ConnectAck;
-
-            outgoing_packets.send(OutgoingPacket::new(addr, reply, DeliveryType::ReliableOrdered));
-
-            // Send all existing state to new client
-            let players_vec = players
-                .values()
-                .map(|p| NewPlayerPacket::new(p.name.clone(), p.id, p.pos))
-                .collect();
-
-            let full_state_packet =
-                ServerToClient::FullGameState(FullGameStatePacket::new(players_vec));
-
-            outgoing_packets.send(OutgoingPacket::new(
-                addr,
-                full_state_packet,
-                DeliveryType::ReliableOrdered,
-            ));
-
-            // Tell all other players this one has connected
-            let new_player_packet = ServerToClient::NewPlayer(NewPlayerPacket::new(
-                connect_packet.name.clone(), // TODO(bschwind) - can we get an EventReader iterator which gives owned values?
-                new_player_id,
-                new_player_pos,
-            ));
-
-            for player_addr in players.keys() {
-                if *player_addr != addr {
-                    outgoing_packets.send(OutgoingPacket::new(
-                        *player_addr,
-                        new_player_packet.clone(),
-                        DeliveryType::ReliableOrdered,
-                    ));
-                }
-            }
-        }
-    }
+    socket
 }
 
 fn network_receive(
@@ -170,7 +87,9 @@ fn network_receive(
     let players = &mut players.0;
     let net_rx = &net_rx.0;
 
-    while let Ok(event) = net_rx.try_recv() {
+    // println!("Network tick");
+
+    for event in net_rx.try_iter() {
         match event {
             SocketEvent::Packet(packet) => {
                 let msg = packet.payload();
@@ -181,8 +100,8 @@ fn network_receive(
                             new_player_tx.send(NewPlayer { addr: packet.addr(), connect_packet });
                         },
                         ClientToServer::PlayerInput(input) => {
-                            if let Some(player) = players.get(&packet.addr()) {
-                                input_tx.send(PlayerInput { id: player.id, input });
+                            if let Some(player_id) = players.get(&packet.addr()) {
+                                input_tx.send(PlayerInput { id: *player_id, input });
                             }
                         },
                     }
@@ -191,8 +110,8 @@ fn network_receive(
                 }
             },
             SocketEvent::Timeout(addr) => {
-                if let Some(player) = players.get(&addr) {
-                    println!("{} ({}) timed out", player.name, addr);
+                if let Some(player_id) = players.get(&addr) {
+                    println!("{} ({}) timed out", player_id, addr);
                 } else {
                     println!("Unknown player timed out: {}", addr);
                 }
@@ -201,8 +120,8 @@ fn network_receive(
                 println!("Client connected: {}", addr);
             },
             SocketEvent::Disconnect(addr) => {
-                if let Some(player) = players.remove(&addr) {
-                    println!("Player {} disconnected ({})", player.name, addr);
+                if let Some(player_id) = players.remove(&addr) {
+                    println!("Player {} disconnected ({})", player_id, addr);
                 } else {
                     println!("Unknown player disconnected: {}", addr);
                 }
@@ -211,58 +130,79 @@ fn network_receive(
     }
 }
 
-struct OutgoingPacket {
-    addr: SocketAddr,
-    packet: ServerToClient,
-    delivery_type: DeliveryType,
-}
-
-impl OutgoingPacket {
-    pub fn new(addr: SocketAddr, packet: ServerToClient, delivery_type: DeliveryType) -> Self {
-        Self { addr, packet, delivery_type }
-    }
-}
-
 #[allow(unused)]
-enum DeliveryType {
-    ReliableOrdered,
-    ReliableSequenced,
-    ReliableUnordered,
-    Unreliable,
-    UnreliableSequenced,
+pub enum PacketDestination {
+    Single(SocketAddr),
+    BroadcastToAll,
+    BroadcastToAllExcept(SocketAddr),
+    BroadcastToSet(Vec<SocketAddr>),
 }
 
-fn network_send(net_tx: Res<NetTx>, mut outgoing_packets: EventReader<OutgoingPacket>) {
+fn network_send(
+    net_tx: Res<NetTx>,
+    mut outgoing_packets: ResMut<Events<OutgoingPacket>>,
+    player_addrs: Query<&PlayerNetworkAddr>,
+) {
     let net_tx = &net_tx.0;
 
-    for outgoing in outgoing_packets.iter() {
-        let packet = match outgoing.delivery_type {
-            DeliveryType::ReliableOrdered => Packet::reliable_ordered(
-                outgoing.addr,
-                bincode::serialize(&outgoing.packet).unwrap(),
-                None,
-            ),
-            DeliveryType::ReliableSequenced => Packet::reliable_sequenced(
-                outgoing.addr,
-                bincode::serialize(&outgoing.packet).unwrap(),
-                None,
-            ),
-            DeliveryType::ReliableUnordered => Packet::reliable_unordered(
-                outgoing.addr,
-                bincode::serialize(&outgoing.packet).unwrap(),
-            ),
-            DeliveryType::Unreliable => {
-                Packet::unreliable(outgoing.addr, bincode::serialize(&outgoing.packet).unwrap())
-            },
-            DeliveryType::UnreliableSequenced => Packet::unreliable_sequenced(
-                outgoing.addr,
-                bincode::serialize(&outgoing.packet).unwrap(),
-                None,
-            ),
-        };
+    for outgoing in outgoing_packets.drain() {
+        let data = bincode::serialize(&outgoing.packet).unwrap();
 
-        if let Err(e) = net_tx.send(packet) {
-            println!("Failed to send packet: {:?}", e);
+        match &outgoing.destination {
+            PacketDestination::Single(addr) => {
+                let packet = make_packet(outgoing.delivery_type, data, *addr, outgoing.stream_id);
+
+                if let Err(e) = net_tx.send(packet) {
+                    println!("Failed to send packet: {:?}", e);
+                }
+            },
+            PacketDestination::BroadcastToAll => {
+                player_addrs.iter().for_each(|PlayerNetworkAddr(addr)| {
+                    // TODO(bschwind) - Ideally we wouldn't clone this Vec here, but laminar
+                    // packets take a Vec<u8> instead of a slice.
+                    let packet = make_packet(
+                        outgoing.delivery_type,
+                        data.clone(),
+                        *addr,
+                        outgoing.stream_id,
+                    );
+
+                    if let Err(e) = net_tx.send(packet) {
+                        println!("Failed to send packet: {:?}", e);
+                    }
+                });
+            },
+            PacketDestination::BroadcastToAllExcept(exclude_addr) => {
+                player_addrs
+                    .iter()
+                    .filter(|PlayerNetworkAddr(addr)| *addr != *exclude_addr)
+                    .for_each(|PlayerNetworkAddr(addr)| {
+                        let packet = make_packet(
+                            outgoing.delivery_type,
+                            data.clone(),
+                            *addr,
+                            outgoing.stream_id,
+                        );
+
+                        if let Err(e) = net_tx.send(packet) {
+                            println!("Failed to send packet: {:?}", e);
+                        }
+                    });
+            },
+            PacketDestination::BroadcastToSet(addrs) => {
+                addrs.iter().for_each(|addr| {
+                    let packet = make_packet(
+                        outgoing.delivery_type,
+                        data.clone(),
+                        *addr,
+                        outgoing.stream_id,
+                    );
+
+                    if let Err(e) = net_tx.send(packet) {
+                        println!("Failed to send packet: {:?}", e);
+                    }
+                });
+            },
         }
     }
 }

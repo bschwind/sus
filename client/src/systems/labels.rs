@@ -4,11 +4,13 @@ use sus_common::simple_game::bevy::{bevy_ecs, SystemSet};
 pub struct Network;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, SystemSet)]
-pub struct Lobby;
+pub struct MainLogic;
+
+#[derive(Clone, Hash, Debug, PartialEq, Eq, SystemSet)]
+pub struct Render;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, SystemSet)]
 pub enum NetworkSystem {
     Receive,
-    PlayerInput,
     SendPackets,
 }

@@ -1,9 +1,17 @@
 use crate::network::PlayerInputPacket;
+use simple_game::bevy::{bevy_ecs, Resource, States};
 
+pub mod components;
+pub mod math;
 pub mod network;
+pub mod resources;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub use laminar;
+pub use simple_game;
+
+#[derive(States, Default, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum GameState {
+    #[default]
     Lobby,
     IntroScreen,
     Main,
@@ -40,7 +48,7 @@ impl Player {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Resource)]
 pub struct PlayerInput {
     pub up: bool,
     pub down: bool,
@@ -48,27 +56,28 @@ pub struct PlayerInput {
     pub right: bool,
 }
 
-impl Default for PlayerInput {
-    fn default() -> Self {
-        Self { up: false, down: false, left: false, right: false }
+impl PlayerInput {
+    pub fn x(&self) -> i16 {
+        match (self.left, self.right) {
+            (true, true) => 0,
+            (true, false) => i16::MIN,
+            (false, true) => i16::MAX,
+            (false, false) => 0,
+        }
+    }
+
+    pub fn y(&self) -> i16 {
+        match (self.up, self.down) {
+            (true, true) => 0,
+            (true, false) => i16::MAX,
+            (false, true) => i16::MIN,
+            (false, false) => 0,
+        }
     }
 }
 
-impl From<&PlayerInput> for PlayerInputPacket {
-    fn from(player_input: &PlayerInput) -> Self {
-        Self {
-            x: match (player_input.left, player_input.right) {
-                (true, true) => 0,
-                (true, false) => i16::MIN,
-                (false, true) => i16::MAX,
-                (false, false) => 0,
-            },
-            y: match (player_input.up, player_input.down) {
-                (true, true) => 0,
-                (true, false) => i16::MAX,
-                (false, true) => i16::MIN,
-                (false, false) => 0,
-            },
-        }
+impl PlayerInput {
+    pub fn to_player_input_packet(&self, counter: u16) -> PlayerInputPacket {
+        PlayerInputPacket { counter, x: self.x(), y: self.y() }
     }
 }
