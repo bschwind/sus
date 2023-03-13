@@ -1718,7 +1718,7 @@ dependencies = [
 [[package]]
 name = "simple-game"
 version = "0.1.0"
-source = "git+https://github.com/bschwind/simple-game?branch=bevy-0.10#7af26dac2fabc7f50aff189c55b590948a40221c"
+source = "git+https://github.com/bschwind/simple-game?branch=master#cbfe373bc7c04758b56ec93e6d12d1c4c13d6aa1"
 dependencies = [
  "bevy_app",
  "bevy_core",

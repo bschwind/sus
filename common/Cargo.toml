@@ -8,4 +8,4 @@ edition = "2018"
 crossbeam-channel = "0.5"
 laminar = "0.5"
 serde = { version = "1", features = ["derive"] }
-simple-game = { git = "https://github.com/bschwind/simple-game", branch = "bevy-0.10", features = ["bevy"] }
+simple-game = { git = "https://github.com/bschwind/simple-game", branch = "master", features = ["bevy"] }
