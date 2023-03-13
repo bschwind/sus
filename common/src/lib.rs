@@ -1,17 +1,17 @@
 use crate::network::PlayerInputPacket;
-use simple_game::bevy::{bevy_ecs, Resource};
+use simple_game::bevy::{bevy_ecs, Resource, States};
 
 pub mod components;
 pub mod math;
 pub mod network;
 pub mod resources;
-pub mod systems;
 
 pub use laminar;
 pub use simple_game;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(States, Default, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum GameState {
+    #[default]
     Lobby,
     IntroScreen,
     Main,

@@ -2,7 +2,7 @@ use crate::{
     components::{ClientPlayerBundle, MyPlayer},
     events::OutgoingPacket,
     resources::{InputCounter, MyName},
-    systems::{ClientNetworkPlugin, RenderPlugin},
+    systems::{labels, ClientNetworkPlugin, RenderPlugin},
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -18,14 +18,14 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
-            bevy_ecs, App, BevyGame, Commands, EventReader, EventWriter, FixedTimestep, Query, Res,
-            ResMut, Resource, SimpleGamePlugin, SystemSet, Transform, With,
+            bevy_ecs, App, BevyGame, Commands, CoreSchedule, EventReader, EventWriter, FixedTime,
+            IntoSystemAppConfigs, IntoSystemConfigs, IntoSystemSetConfig, Query, Res, ResMut,
+            Resource, SimpleGamePlugin, Transform, With,
         },
         glam::{vec3, Vec3},
         winit::event::{ElementState, KeyboardInput, VirtualKeyCode},
         WindowDimensions,
     },
-    systems::labels,
     PlayerInput,
 };
 
@@ -35,7 +35,6 @@ mod resources;
 mod systems;
 
 const SERVER_ADDR: &str = "127.0.0.1:7600";
-const GAME_TIMESTEP_LABEL: &str = "game_timestep";
 
 #[derive(Debug, Resource)]
 struct SusGame {
@@ -64,25 +63,27 @@ impl BevyGame for SusGame {
 
         ecs_world_builder
             .add_plugin(SimpleGamePlugin)
+            .insert_resource(FixedTime::new_from_secs(1.0 / Self::desired_fps() as f32))
             .insert_resource(game)
             .insert_resource(MyName(my_name))
             .add_startup_system(init)
-            .add_plugin(ClientNetworkPlugin::new(Self::desired_fps()))
+            .add_plugin(ClientNetworkPlugin)
             .add_plugin(RenderPlugin)
+            .configure_set(labels::MainLogic.after(labels::NetworkSystem::Receive))
             .add_system(handle_input)
-            .add_system_set(
-                SystemSet::new()
+            .add_systems(
+                (
+                    send_input_to_server,
+                    handle_connect_ack,
+                    handle_full_game_state,
+                    new_player_joined,
+                    handle_lobby_tick,
+                    update_game,
+                )
+                    .after(handle_input)
                     .after(labels::NetworkSystem::Receive)
-                    .with_run_criteria(
-                        FixedTimestep::step(1.0 / Self::desired_fps() as f64)
-                            .with_label(GAME_TIMESTEP_LABEL),
-                    )
-                    .with_system(send_input_to_server)
-                    .with_system(handle_connect_ack)
-                    .with_system(handle_full_game_state)
-                    .with_system(new_player_joined)
-                    .with_system(handle_lobby_tick)
-                    .with_system(update_game),
+                    .in_set(labels::MainLogic)
+                    .in_schedule(CoreSchedule::FixedUpdate),
             );
 
         ecs_world_builder

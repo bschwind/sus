@@ -1,3 +1,5 @@
+pub mod labels;
+
 pub mod network;
 pub use network::*;
 

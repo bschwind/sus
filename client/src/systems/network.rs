@@ -1,4 +1,4 @@
-use crate::{events::OutgoingPacket, MyName, SusGame, GAME_TIMESTEP_LABEL};
+use crate::{events::OutgoingPacket, labels, MyName, SusGame};
 use std::time::Duration;
 use sus_common::{
     laminar::{Config as NetworkConfig, Socket, SocketEvent},
@@ -8,21 +8,12 @@ use sus_common::{
     },
     resources::network::{NetRx, NetTx, NetworkThread},
     simple_game::bevy::{
-        bevy_ecs::event::Events, App, Commands, EventWriter, FixedTimestep, IntoSystemDescriptor,
-        Plugin, Res, ResMut, SystemSet,
+        bevy_ecs::event::Events, App, Commands, CoreSchedule, EventWriter, IntoSystemAppConfig,
+        IntoSystemConfig, Plugin, Res, ResMut,
     },
-    systems::labels,
 };
 
-pub struct ClientNetworkPlugin {
-    fixed_timestep: f64,
-}
-
-impl ClientNetworkPlugin {
-    pub fn new(update_fps: usize) -> Self {
-        Self { fixed_timestep: 1.0 / update_fps as f64 }
-    }
-}
+pub struct ClientNetworkPlugin;
 
 impl Plugin for ClientNetworkPlugin {
     fn build(&self, app: &mut App) {
@@ -32,23 +23,19 @@ impl Plugin for ClientNetworkPlugin {
             .add_event::<FullGameStatePacket>()
             .add_event::<LobbyTickPacket>()
             .init_resource::<Events<OutgoingPacket>>()
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(
-                        FixedTimestep::step(self.fixed_timestep).with_label(GAME_TIMESTEP_LABEL),
-                    )
-                    .label(labels::Network)
-                    .with_system(network_receive.label(labels::NetworkSystem::Receive)),
+            .add_system(
+                network_receive
+                    .in_schedule(CoreSchedule::FixedUpdate)
+                    .in_set(labels::Network)
+                    .in_set(labels::NetworkSystem::Receive),
             )
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(
-                        FixedTimestep::step(self.fixed_timestep).with_label(GAME_TIMESTEP_LABEL),
-                    )
-                    .with_system(
-                        network_send.label(labels::NetworkSystem::SendPackets).after(labels::Lobby), // TODO - Use better ordering here.
-                    ),
-            );
+            .add_system(
+                network_send
+                    .in_schedule(CoreSchedule::FixedUpdate)
+                    .in_set(labels::Network)
+                    .in_set(labels::NetworkSystem::SendPackets)
+                    .after(labels::MainLogic),
+            ); // TODO - Use better ordering here.
     }
 }
 

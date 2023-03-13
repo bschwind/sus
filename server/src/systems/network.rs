@@ -1,6 +1,7 @@
 use crate::{
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
+    systems::labels,
     TICK_RATE_HZ,
 };
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
@@ -13,10 +14,9 @@ use sus_common::{
         PlayerToEntity,
     },
     simple_game::bevy::{
-        bevy_ecs, bevy_ecs::event::Events, App, Commands, EventWriter, IntoSystemDescriptor,
-        Plugin, Query, Res, ResMut, Resource, SystemSet,
+        bevy_ecs, bevy_ecs::event::Events, App, Commands, EventWriter, IntoSystemConfig, Plugin,
+        Query, Res, ResMut, Resource,
     },
-    systems::labels,
 };
 
 const BIND_ADDR: &str = "0.0.0.0:7600";
@@ -32,13 +32,14 @@ impl Plugin for ServerNetworkPlugin {
             .add_event::<PlayerInput>()
             .init_resource::<Events<NewPlayer>>()
             .init_resource::<Events<OutgoingPacket>>()
-            .add_system_set(
-                SystemSet::new()
-                    .label(labels::Network)
-                    .with_system(network_receive.label(labels::NetworkSystem::Receive)),
+            .add_system(
+                network_receive.in_set(labels::NetworkSystem::Receive).in_set(labels::Network),
             )
             .add_system(
-                network_send.label(labels::NetworkSystem::SendPackets).after(labels::Lobby), // TODO - Use better ordering here.
+                network_send
+                    .in_set(labels::NetworkSystem::SendPackets)
+                    .in_set(labels::Network)
+                    .after(labels::Lobby), // TODO - Use better ordering here.
             );
     }
 }

@@ -2,7 +2,7 @@ use crate::{
     components::ServerPlayerBundle,
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
-    systems::{fixed_timestep_with_state, network::PlayerIdCounter, PacketDestination},
+    systems::{labels, network::PlayerIdCounter, PacketDestination},
 };
 use std::{
     collections::VecDeque,
@@ -21,15 +21,13 @@ use sus_common::{
     resources::PlayerToEntity,
     simple_game::{
         bevy::{
-            bevy_ecs,
-            bevy_ecs::event::Events,
-            schedule::{ShouldRun, State},
-            App, Commands, Component, EventReader, EventWriter, FixedTimestep, In,
-            IntoSystemDescriptor, Plugin, Query, Res, ResMut, SystemSet, Transform,
+            bevy_ecs, bevy_ecs::event::Events, in_state, schedule::State, App, Commands, Component,
+            CoreSchedule, EventReader, EventWriter, IntoSystemAppConfig, IntoSystemAppConfigs,
+            IntoSystemConfig, IntoSystemConfigs, NextState, OnEnter, OnExit, OnUpdate, Plugin,
+            Query, Res, ResMut, Transform,
         },
         glam::{vec3, Vec3},
     },
-    systems::labels,
     GameState,
 };
 
@@ -47,30 +45,26 @@ impl LobbyPlugin {
 impl Plugin for LobbyPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup)
-            .add_system_set(SystemSet::on_enter(GameState::Lobby).with_system(setup_lobby))
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(fixed_timestep_with_state!(
-                        self.fixed_timestep,
-                        GameState::Lobby,
-                    ))
-                    .label(labels::Lobby)
+            .add_system(setup_lobby.in_schedule(OnEnter(GameState::Lobby)))
+            .add_systems(
+                (
+                    // https://github.com/bevyengine/bevy/issues/8059#issuecomment-1466255766
+                    handle_player_input
+                        .in_set(labels::NetworkSystem::PlayerInput)
+                        .after(labels::NetworkSystem::Receive)
+                        .run_if(in_state(GameState::Lobby)),
+                    update_lobby
+                        .after(labels::NetworkSystem::PlayerInput)
+                        .run_if(in_state(GameState::Lobby)),
+                    new_player_joined.run_if(in_state(GameState::Lobby)),
+                )
+                    .in_set(labels::Lobby)
                     .after(labels::Network)
-                    .with_system(
-                        handle_player_input
-                            .label(labels::NetworkSystem::PlayerInput)
-                            .after(labels::NetworkSystem::Receive),
-                    )
-                    .with_system(update_lobby.after(labels::NetworkSystem::PlayerInput))
-                    .with_system(new_player_joined),
+                    .in_schedule(CoreSchedule::FixedUpdate),
             )
-            .add_system_set(
-                SystemSet::on_update(GameState::Lobby)
-                    .with_system(update_lobby_timer)
-                    .after(labels::Lobby),
-            )
-            .add_system(send_new_state.label(labels::NetworkSystem::SendPackets))
-            .add_system_set(SystemSet::on_exit(GameState::Lobby).with_system(close_lobby));
+            .add_system(update_lobby_timer.after(labels::Lobby).in_set(OnUpdate(GameState::Lobby)))
+            .add_system(send_new_state.in_set(labels::NetworkSystem::SendPackets))
+            .add_system(close_lobby.in_schedule(OnExit(GameState::Lobby)));
     }
 }
 
@@ -98,7 +92,7 @@ fn update_lobby(
     // println!("Lobby tick");
 
     for (
-        player_id,
+        _player_id,
         mut transform,
         mut unprocessed_inputs,
         mut position_history,
@@ -108,7 +102,7 @@ fn update_lobby(
         if let Some(input) = unprocessed_inputs.0.pop_front() {
             if input.counter.sequentially_greater_than(last_input_counter.0) {
                 last_input_counter.0 = input.counter;
-                println!("Moving player ID {} with input {:?}", player_id.0, input);
+                // println!("Moving player ID {} with input {:?}", player_id.0, input);
 
                 let velocity = vec3(input.x.normalized(), input.y.normalized(), 0.0);
 
@@ -119,13 +113,17 @@ fn update_lobby(
     }
 }
 
-fn update_lobby_timer(mut game_state: ResMut<State<GameState>>, lobby_timer: Query<&LobbyTimer>) {
+fn update_lobby_timer(
+    game_state: Res<State<GameState>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    lobby_timer: Query<&LobbyTimer>,
+) {
     let lobby_timer = lobby_timer.single().0;
 
     if lobby_timer.elapsed() > LOBBY_COUNTDOWN_TIME {
         println!("Leaving lobby!");
-        if game_state.current() == &GameState::Lobby {
-            game_state.set(GameState::IntroScreen).unwrap();
+        if game_state.0 == GameState::Lobby {
+            next_state.set(GameState::IntroScreen);
         }
     }
 }
@@ -175,7 +173,7 @@ fn handle_player_input(
 ) {
     for event in input_rx.iter() {
         if let Some(player_entity) = player_to_entity.0.get(&event.id) {
-            println!("Player (id={}) sent input: {:?}", event.id, event.input);
+            // println!("Player (id={}) sent input: {:?}", event.id, event.input);
 
             if let Ok(mut unprocessed_input) = unprocessed_inputs.get_mut(*player_entity) {
                 unprocessed_input.0.push_back(event.input);

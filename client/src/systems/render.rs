@@ -1,15 +1,14 @@
-use crate::SusGame;
+use crate::{labels, SusGame};
 use sus_common::{
     components::player::PlayerId,
     simple_game::{
-        bevy::{App, Commands, IntoSystemDescriptor, Plugin, Query, Res, ResMut, Transform},
+        bevy::{App, Commands, IntoSystemConfig, Plugin, Query, Res, ResMut, Transform},
         graphics::{
             text::{AxisAlign, Color, DefaultFont, StyledText, TextAlignment, TextSystem},
             DebugDrawer, FullscreenQuad, GraphicsDevice,
         },
         wgpu,
     },
-    systems::labels,
     PlayerInput,
 };
 
@@ -17,7 +16,7 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup).add_system(render.label(labels::Render));
+        app.add_startup_system(setup).add_system(render.in_set(labels::Render));
     }
 }
 
