@@ -1,4 +1,4 @@
-use crate::{labels, SusGame};
+use crate::{sets, SusGame};
 use sus_common::{
     components::player::PlayerId,
     simple_game::{
@@ -16,7 +16,7 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup).add_system(render.in_set(labels::Render));
+        app.add_startup_system(setup).add_system(render.in_set(sets::Render));
     }
 }
 

@@ -2,7 +2,7 @@ use crate::{
     components::{ClientPlayerBundle, MyPlayer},
     events::OutgoingPacket,
     resources::{InputCounter, MyName},
-    systems::{labels, ClientNetworkPlugin, RenderPlugin},
+    systems::{sets, ClientNetworkPlugin, RenderPlugin},
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -69,7 +69,7 @@ impl BevyGame for SusGame {
             .add_startup_system(init)
             .add_plugin(ClientNetworkPlugin)
             .add_plugin(RenderPlugin)
-            .configure_set(labels::MainLogic.after(labels::NetworkSystem::Receive))
+            .configure_set(sets::MainLogic.after(sets::NetworkSystem::Receive))
             .add_system(handle_input)
             .add_systems(
                 (
@@ -81,8 +81,8 @@ impl BevyGame for SusGame {
                     update_game,
                 )
                     .after(handle_input)
-                    .after(labels::NetworkSystem::Receive)
-                    .in_set(labels::MainLogic)
+                    .after(sets::NetworkSystem::Receive)
+                    .in_set(sets::MainLogic)
                     .in_schedule(CoreSchedule::FixedUpdate),
             );
 

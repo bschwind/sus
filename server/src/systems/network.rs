@@ -1,7 +1,7 @@
 use crate::{
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
-    systems::labels,
+    systems::sets,
     TICK_RATE_HZ,
 };
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
@@ -32,14 +32,12 @@ impl Plugin for ServerNetworkPlugin {
             .add_event::<PlayerInput>()
             .init_resource::<Events<NewPlayer>>()
             .init_resource::<Events<OutgoingPacket>>()
-            .add_system(
-                network_receive.in_set(labels::NetworkSystem::Receive).in_set(labels::Network),
-            )
+            .add_system(network_receive.in_set(sets::NetworkSystem::Receive).in_set(sets::Network))
             .add_system(
                 network_send
-                    .in_set(labels::NetworkSystem::SendPackets)
-                    .in_set(labels::Network)
-                    .after(labels::Lobby), // TODO - Use better ordering here.
+                    .in_set(sets::NetworkSystem::SendPackets)
+                    .in_set(sets::Network)
+                    .after(sets::Lobby), // TODO - Use better ordering here.
             );
     }
 }

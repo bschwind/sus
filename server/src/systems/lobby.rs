@@ -2,7 +2,7 @@ use crate::{
     components::ServerPlayerBundle,
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
-    systems::{labels, network::PlayerIdCounter, PacketDestination},
+    systems::{network::PlayerIdCounter, sets, PacketDestination},
 };
 use std::{
     collections::VecDeque,
@@ -49,18 +49,18 @@ impl Plugin for LobbyPlugin {
             .add_systems(
                 (
                     handle_player_input
-                        .in_set(labels::NetworkSystem::PlayerInput)
-                        .after(labels::NetworkSystem::Receive),
-                    update_lobby.after(labels::NetworkSystem::PlayerInput),
+                        .in_set(sets::NetworkSystem::PlayerInput)
+                        .after(sets::NetworkSystem::Receive),
+                    update_lobby.after(sets::NetworkSystem::PlayerInput),
                     new_player_joined,
                 )
-                    .in_set(labels::Lobby)
-                    .after(labels::Network)
+                    .in_set(sets::Lobby)
+                    .after(sets::Network)
                     .distributive_run_if(state_active(GameState::Lobby))
                     .in_schedule(CoreSchedule::FixedUpdate),
             )
-            .add_system(update_lobby_timer.after(labels::Lobby).in_set(OnUpdate(GameState::Lobby)))
-            .add_system(send_new_state.in_set(labels::NetworkSystem::SendPackets))
+            .add_system(update_lobby_timer.after(sets::Lobby).in_set(OnUpdate(GameState::Lobby)))
+            .add_system(send_new_state.in_set(sets::NetworkSystem::SendPackets))
             .add_system(close_lobby.in_schedule(OnExit(GameState::Lobby)));
     }
 }

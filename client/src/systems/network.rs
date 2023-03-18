@@ -1,4 +1,4 @@
-use crate::{events::OutgoingPacket, labels, MyName, SusGame};
+use crate::{events::OutgoingPacket, sets, MyName, SusGame};
 use std::time::Duration;
 use sus_common::{
     laminar::{Config as NetworkConfig, Socket, SocketEvent},
@@ -26,15 +26,15 @@ impl Plugin for ClientNetworkPlugin {
             .add_system(
                 network_receive
                     .in_schedule(CoreSchedule::FixedUpdate)
-                    .in_set(labels::Network)
-                    .in_set(labels::NetworkSystem::Receive),
+                    .in_set(sets::Network)
+                    .in_set(sets::NetworkSystem::Receive),
             )
             .add_system(
                 network_send
                     .in_schedule(CoreSchedule::FixedUpdate)
-                    .in_set(labels::Network)
-                    .in_set(labels::NetworkSystem::SendPackets)
-                    .after(labels::MainLogic),
+                    .in_set(sets::Network)
+                    .in_set(sets::NetworkSystem::SendPackets)
+                    .after(sets::MainLogic),
             ); // TODO - Use better ordering here.
     }
 }
