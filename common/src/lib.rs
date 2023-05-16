@@ -1,5 +1,5 @@
 use crate::network::PlayerInputPacket;
-use simple_game::bevy::{bevy_ecs, Res, Resource, State, States};
+use simple_game::bevy::{bevy_ecs, Resource, States};
 
 pub mod components;
 pub mod math;
@@ -16,14 +16,6 @@ pub enum GameState {
     IntroScreen,
     Main,
     End,
-}
-
-// Similar to the `in_state()` function in bevy, but with a Clone bound
-// on the returned closure. Named `state_active` instead of `in_state`
-// to avoid confusion with the official bevy function.
-// https://github.com/bevyengine/bevy/issues/8059#issuecomment-1466389318
-pub fn state_active<S: States>(state: S) -> impl Clone + FnMut(Res<State<S>>) -> bool {
-    move |current_state: Res<State<S>>| current_state.0 == state
 }
 
 pub enum PlayerType {

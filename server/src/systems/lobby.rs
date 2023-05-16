@@ -2,7 +2,9 @@ use crate::{
     components::ServerPlayerBundle,
     events::{NewPlayer, OutgoingPacket, PlayerInput},
     resources::AddrToPlayer,
-    systems::{network::PlayerIdCounter, sets, PacketDestination},
+    systems::{
+        lobby::bevy_ecs::prelude::in_state, network::PlayerIdCounter, sets, PacketDestination,
+    },
 };
 use std::{
     collections::VecDeque,
@@ -28,7 +30,7 @@ use sus_common::{
         },
         glam::{vec3, Vec3},
     },
-    state_active, GameState,
+    GameState,
 };
 
 #[allow(unused)]
@@ -56,7 +58,7 @@ impl Plugin for LobbyPlugin {
                 )
                     .in_set(sets::Lobby)
                     .after(sets::Network)
-                    .distributive_run_if(state_active(GameState::Lobby))
+                    .distributive_run_if(in_state(GameState::Lobby))
                     .in_schedule(CoreSchedule::FixedUpdate),
             )
             .add_system(update_lobby_timer.after(sets::Lobby).in_set(OnUpdate(GameState::Lobby)))
